@@ -42,6 +42,9 @@ export interface Host {
   readonly filesScroll: number;
   readonly fileQuery: string;
   readonly fileSort: FileSort;
+  readonly isDirty: boolean;
+  saveDrawing(): void;
+  saveAsDrawing(): void;
   openDrawing(path: string): void;
   newDrawing(): void;
   renameDrawing(): void;

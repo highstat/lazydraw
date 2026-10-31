@@ -55,6 +55,12 @@ function codepointToKeyName(cp: number): string {
   if (cp === 9) return "tab";
   if (cp === 32) return "space";
   if (cp === 127 || cp === 8) return "backspace";
+  if (cp === 57376) return "delete";
+  if (cp === 57377) return "pageup";
+  if (cp === 57378) return "pagedown";
+  if (cp === 57379) return "home";
+  if (cp === 57380) return "end";
+  if (cp === 57381) return "insert";
   if (cp >= 65 && cp <= 90) return String.fromCharCode(cp + 32); // lowercase
   if (cp >= 97 && cp <= 122) return String.fromCharCode(cp);
   if (cp >= 48 && cp <= 57) return String.fromCharCode(cp);
@@ -84,12 +90,12 @@ export function normalizeKeyEvent(k: KeyEvent): KeyEvent {
     const meta = !!(mask & 32) || (IS_MAC && sup);
 
     k.name = codepointToKeyName(cp);
-    k.shift = k.shift || shift;
-    k.option = k.option || alt;
-    k.ctrl = k.ctrl || ctrl;
-    k.super = k.super || sup;
-    k.meta = k.meta || meta || (IS_MAC && sup);
-    (k as any).hyper = (k as any).hyper || hyper;
+    k.shift = shift;
+    k.option = alt;
+    k.ctrl = ctrl;
+    k.super = sup;
+    k.meta = meta;
+    (k as any).hyper = hyper;
     return k;
   }
 
@@ -104,11 +110,11 @@ export function normalizeKeyEvent(k: KeyEvent): KeyEvent {
     const meta = !!(mask & 32) || (IS_MAC && sup);
 
     k.name = codepointToKeyName(cp);
-    k.shift = k.shift || shift;
-    k.option = k.option || alt;
-    k.ctrl = k.ctrl || ctrl;
-    k.super = k.super || sup;
-    k.meta = k.meta || meta || (IS_MAC && sup);
+    k.shift = shift;
+    k.option = alt;
+    k.ctrl = ctrl;
+    k.super = sup;
+    k.meta = meta;
     return k;
   }
 

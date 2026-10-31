@@ -27,6 +27,13 @@ export function renderFiles(p: Painter, host: Host, anchorX: number, top: number
   const { pal } = p;
   const actions = [
     { id: "files:new", label: "[new]", action: () => host.newDrawing(), fg: pal.accent },
+    {
+      id: "files:save",
+      label: host.isDirty ? "[save ●]" : "[save ✓]",
+      action: () => host.saveDrawing(),
+      fg: host.isDirty ? pal.warning : pal.success,
+    },
+    { id: "files:saveAs", label: "[save as...]", action: () => host.saveAsDrawing(), fg: pal.accent },
     { id: "files:rename", label: "[rename]", action: () => host.renameDrawing() },
     { id: "files:fork", label: "[fork]", action: () => host.forkDrawing() },
     { id: "files:import", label: "[text]", action: () => host.browseImportText() },

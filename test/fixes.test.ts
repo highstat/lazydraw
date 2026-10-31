@@ -39,6 +39,72 @@ describe("Kitty keyboard and Command+Z normalization", () => {
     expect(k.super).toBe(true);
     expect(commandMatches(k, "app:redo")).toBe(true);
   });
+
+  test("normalizes Kitty CSI u Backspace \\x1b[127u without bogus modifiers", () => {
+    // When OpenTUI does not recognize \x1b[127u, it gives an event with bogus ctrl: true, meta: true
+    const unparsed = {
+      name: "",
+      sequence: "\x1b[127u",
+      raw: "\x1b[127u",
+      ctrl: true,
+      meta: true,
+      super: true,
+      shift: false,
+      option: true,
+      number: false,
+      eventType: "press",
+      source: "raw",
+    } as unknown as KeyEvent;
+    const k = normalizeKeyEvent(unparsed);
+    expect(k.name).toBe("backspace");
+    expect(k.ctrl).toBe(false);
+    expect(k.meta).toBe(false);
+    expect(k.super).toBe(false);
+    expect(k.option).toBe(false);
+  });
+
+  test("normalizes Kitty CSI u Delete \\x1b[57376u to delete without bogus modifiers", () => {
+    const unparsed = {
+      name: "",
+      sequence: "\x1b[57376u",
+      raw: "\x1b[57376u",
+      ctrl: true,
+      meta: true,
+      super: true,
+      shift: false,
+      option: true,
+      number: false,
+      eventType: "press",
+      source: "raw",
+    } as unknown as KeyEvent;
+    const k = normalizeKeyEvent(unparsed);
+    expect(k.name).toBe("delete");
+    expect(k.ctrl).toBe(false);
+    expect(k.meta).toBe(false);
+    expect(k.super).toBe(false);
+  });
+});
+
+describe("Selection deletion command", () => {
+  test("command app:deleteSelection matches delete and backspace", () => {
+    expect(commandMatches({ name: "delete", ctrl: false, meta: false, shift: false, option: false } as KeyEvent, "app:deleteSelection")).toBe(true);
+    expect(commandMatches({ name: "backspace", ctrl: false, meta: false, shift: false, option: false } as KeyEvent, "app:deleteSelection")).toBe(true);
+  });
+
+  test("selecting all and executing eraseSelection deletes all cells", () => {
+    const canvas = new Canvas();
+    canvas.committed.set(new Vector(0, 0), "A");
+    canvas.committed.set(new Vector(1, 0), "B");
+    const editor = new Editor(canvas);
+    editor.setTool("select");
+    editor.select.selectAll();
+    expect(editor.select.hasSelection).toBe(true);
+
+    const ok = editor.select.eraseSelection();
+    expect(ok).toBe(true);
+    expect(canvas.committed.size()).toBe(0);
+    expect(editor.select.hasSelection).toBe(false);
+  });
 });
 
 describe("Text tool does not discard typed text on exit / move", () => {

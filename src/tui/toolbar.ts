@@ -9,6 +9,7 @@ export type PanelId = "files" | "export" | "settings" | "help" | "menu" | "histo
 export type ItemId =
   | "menu"
   | "files"
+  | "save"
   | "export"
   | "undo"
   | "redo"
@@ -37,7 +38,10 @@ const NARROW_TOOLS = ["box", "sel", "arw", "lin", "txt", "ers", "pen"];
 const wide = (toolLabels: string[], exp: string, help: string): Item[][] => [
   [{ id: "files", label: "≡" }],
   tools(toolLabels),
-  [{ id: "export", label: exp }],
+  [
+    { id: "save", label: "💾" },
+    { id: "export", label: exp },
+  ],
   [
     { id: "undo", label: "⟲" },
     { id: "redo", label: "⟳" },
@@ -103,6 +107,7 @@ export interface ToolbarHost {
   readonly canUndo: boolean;
   readonly canRedo: boolean;
   readonly showChips: boolean;
+  readonly isDirty?: boolean;
   activate(id: ItemId, anchorX: number): void;
 }
 
@@ -149,6 +154,13 @@ export function renderToolbar(p: Painter, host: ToolbarHost, layout: ToolbarLayo
     if ((TOOL_IDS as readonly string[]).includes(span.id)) {
       const tool = span.id as ToolId;
       p.button(id, span.x, row, label, act, { active: host.tool === tool, activeColor: toolColor(pal, tool) });
+    } else if (span.id === "save") {
+      const isDirty = host.isDirty ?? false;
+      p.button(id, span.x, row, label, act, {
+        fg: isDirty ? pal.warning : pal.tbLabel,
+        active: isDirty,
+        activeColor: pal.warning,
+      });
     } else if (span.id === "undo") {
       p.button(id, span.x, row, label, act, { fg: pal.undo, disabled: !host.canUndo });
     } else if (span.id === "redo") {

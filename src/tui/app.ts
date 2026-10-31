@@ -282,6 +282,9 @@ export class App implements Host, ToolbarHost {
   get canRedo(): boolean {
     return this.editor.canvas.canRedo;
   }
+  get isDirty(): boolean {
+    return this.dirty;
+  }
   get showChips(): boolean {
     return this.panel === "help" || Date.now() < this.chipsUntil;
   }
@@ -608,13 +611,32 @@ export class App implements Host, ToolbarHost {
     const toast = this.toastMessage && Date.now() < this.toastMessage.until ? this.toastMessage.text : null;
     const message = Date.now() < this.quitArmed ? "press ctrl+q again to exit" : toast;
     const badge = this.readOnly ? "  ·  read-only" : "";
+    const saveChip = this.dirty ? "[● Unsaved (Save)]" : "[✓ Saved]";
     const rawRight = this.config.showPath
-      ? `${this.drawing.name}${this.dirty ? " •" : ""} · ${this.drawing.path}${badge}`
-      : `${this.drawing.name}${this.dirty ? " •" : ""}  ·  lazydraw${badge}`;
-    const right = rawRight.length > Math.max(24, Math.floor(this.width * 0.62)) ? `…${rawRight.slice(-(Math.max(24, Math.floor(this.width * 0.62)) - 1))}` : rawRight;
+      ? `${saveChip}  ${this.drawing.name} · ${this.drawing.path}${badge}`
+      : `${saveChip}  ${this.drawing.name}  ·  lazydraw${badge}`;
+    const right =
+      rawRight.length > Math.max(24, Math.floor(this.width * 0.62))
+        ? `…${rawRight.slice(-(Math.max(24, Math.floor(this.width * 0.62)) - 1))}`
+        : rawRight;
     const rx = Math.max(0, this.width - right.length - 1);
     p.text(1, y, message ?? hint, message ? pal.warning : pal.muted, pal.bg, 0, rx - 2);
     p.text(rx, y, right, pal.muted, pal.bg);
+
+    if (!this.readOnly && right.includes(saveChip)) {
+      const chipOffset = right.indexOf(saveChip);
+      const chipX = rx + chipOffset;
+      const chipColor = this.dirty ? pal.warning : pal.success;
+      p.text(chipX, y, saveChip, chipColor, pal.bg);
+      p.hotspots.push({
+        id: "status:save",
+        x: chipX,
+        y,
+        w: saveChip.length,
+        h: 1,
+        action: () => this.saveDrawing(),
+      });
+    }
 
     if (!message && this.tool === "box" && !this.readOnly && !this.editor.textEntry) {
       const shapePrefix = "drag to draw a box · b: ";
@@ -850,10 +872,7 @@ export class App implements Host, ToolbarHost {
       if (anyPrimary(k, "z") || (k.ctrl && k.name === "z")) return void (k.shift ? this.redo() : this.undo());
       if (anyPrimary(k, "y") || (k.ctrl && k.name === "y")) return void this.redo();
       if (anyPrimary(k, "s") || (k.ctrl && k.name === "s")) {
-        if (this.readOnly) return this.toast("read-only");
-        this.editor.flush();
-        this.save();
-        return this.toast(`saved · ${this.drawing.path}`);
+        return this.saveDrawing();
       }
       const key = toolKey(k);
       if (key) this.editor.key(key, mods({ ctrl: k.ctrl, alt: k.option, shift: k.shift }));
@@ -950,6 +969,13 @@ export class App implements Host, ToolbarHost {
     if (this.readOnly) {
       if (this.panel) return this.closePanel();
       return;
+    }
+
+    if (key === KEY.BACKSPACE || key === KEY.DELETE) {
+      if (this.editor.canvas.selection != null || this.editor.select.hasSelection) {
+        this.editor.select.eraseSelection();
+        return this.toast("deleted selection");
+      }
     }
 
     if (this.tool === "select" && key) {
@@ -1172,6 +1198,9 @@ export class App implements Host, ToolbarHost {
       case "redo":
         this.redo();
         break;
+      case "save":
+        this.saveDrawing();
+        break;
       case "files":
       case "export":
       case "settings":
@@ -1305,6 +1334,41 @@ export class App implements Host, ToolbarHost {
       this.config.lastDrawing = path;
       this.persistConfig();
       this.watchDrawing(this.opts.watch === true);
+      return null;
+    });
+  }
+
+  saveDrawing(): void {
+    if (this.readOnly) return this.toast("read-only");
+    this.editor.flush();
+    this.save();
+    this.toast(`✓ Saved · ${this.drawing.name} (${this.drawing.path})`);
+  }
+
+  saveAsDrawing(): void {
+    if (this.readOnly) return this.toast("read-only");
+    this.prompt("save drawing as", "name or path", this.drawing.name, (target) => {
+      const trimmed = target.trim();
+      if (!trimmed) return "name or path cannot be empty";
+      this.editor.flush();
+      let path: string;
+      let name: string;
+      if (trimmed.includes("/") || trimmed.endsWith(".ld.json") || trimmed.endsWith(".json")) {
+        path = resolve(trimmed.replace(/^~(?=$|\/)/, homedir()));
+        name = basename(path).replace(/\.ld\.json$/, "").replace(/\.json$/, "");
+      } else {
+        name = trimmed;
+        path = this.store.pathFor(name);
+      }
+      const createdAt = new Date().toISOString();
+      this.store.save(path, name, this.editor.canvas.committed, createdAt);
+      this.drawing = { path, name, layer: this.editor.canvas.committed.clone(), createdAt };
+      this.dirty = false;
+      this.drawings = this.store.list();
+      this.config.lastDrawing = path;
+      this.persistConfig();
+      this.watchDrawing(this.opts.watch === true);
+      this.toast(`✓ Saved as ${name} (${path})`);
       return null;
     });
   }
@@ -1709,9 +1773,9 @@ export class App implements Host, ToolbarHost {
       case "app:redo":
         return this.redo();
       case "app:save":
-        this.editor.flush();
-        this.save();
-        return this.toast(`saved · ${this.drawing.path}`);
+        return this.saveDrawing();
+      case "app:saveAs":
+        return this.saveAsDrawing();
       case "app:new":
         return this.newDrawing();
       case "app:files":
@@ -1756,6 +1820,12 @@ export class App implements Host, ToolbarHost {
         this.setTool("select");
         this.editor.select.selectAll();
         return this.toast("selected all");
+      case "app:deleteSelection":
+        if (this.editor.canvas.selection != null || this.editor.select.hasSelection) {
+          this.editor.select.eraseSelection();
+          return this.toast("deleted selection");
+        }
+        return;
       case "app:duplicate":
         return this.duplicateSelection();
       case "app:settings":
