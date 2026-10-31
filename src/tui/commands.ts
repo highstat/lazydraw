@@ -56,6 +56,11 @@ export const COMMANDS: readonly CommandDef[] = [
   { id: "tool:text", label: "Text tool", group: "Tools" },
   { id: "tool:eraser", label: "Eraser tool", group: "Tools" },
   { id: "tool:pencil", label: "Pencil tool", group: "Tools" },
+  { id: "tool:cycleBoxShape", label: "Cycle box shape", group: "Tools", binding: "b" },
+  { id: "tool:cycleLineStyle", label: "Cycle line / border style", group: "Tools", binding: "s" },
+  { id: "tool:cycleFontStyle", label: "Cycle text font style", group: "Tools", binding: "primary+alt+f" },
+  { id: "tool:brushIncrease", label: "Increase brush size", group: "Tools", binding: "],+,=" },
+  { id: "tool:brushDecrease", label: "Decrease brush size", group: "Tools", binding: "[,-" },
 ];
 
 export const COMMAND_BY_ID = new Map(COMMANDS.map((c) => [c.id, c]));

@@ -24,10 +24,13 @@ import { textSize, textToLayer } from "../core/text";
 import { KEY, mods, type HoverHint, type Mods } from "../core/tools/tool";
 import { Vector } from "../core/vector";
 import {
+  BOX_SHAPES,
   type Config,
   type FileSort,
   type GridStyle,
+  LINE_STYLES,
   saveConfig,
+  TEXT_FONT_STYLES,
   type TextMode,
   type ThemeChoice,
 } from "../storage/config";
@@ -37,7 +40,7 @@ import { defaultExportName, nativeFilePicker } from "../storage/picker";
 import { renderCanvas, Viewport } from "./canvas-view";
 import { COMMANDS, type CommandDef, commandMatches, filterCommands } from "./commands";
 import type { Dialog, Host, InputDialog } from "./host";
-import { altDigit, isCtrl, printable, toolKey } from "./input";
+import { altDigit, isCtrl, normalizeKeyEvent, printable, toolKey } from "./input";
 import { type Hotspot, hotspotAt, inRect, Painter, type Rect } from "./painter";
 import { renderDialog } from "./popovers/dialog";
 import { renderExport as renderExportPanel } from "./popovers/export";
@@ -186,6 +189,7 @@ export class App implements Host, ToolbarHost {
   readonly readOnly: boolean;
   private fileSearch = "";
   private settingsPageIndex = 0;
+  showAllThemes = false;
   private readonly history = new HistoryStore();
   private historyList: Snapshot[] = [];
   private historyCursor = 0;
@@ -378,6 +382,7 @@ export class App implements Host, ToolbarHost {
   save(): void {
     if (this.saveTimer) clearTimeout(this.saveTimer);
     this.saveTimer = null;
+    this.editor.flush();
     try {
       this.store.save(this.drawing.path, this.drawing.name, this.editor.canvas.committed, this.drawing.createdAt);
       this.lastSaveMtime = this.store.modifiedAt(this.drawing.path);
@@ -500,6 +505,12 @@ export class App implements Host, ToolbarHost {
     else if (this.editor.textEntry) hint = "typing · enter: new line · esc: done · ctrl+z: undo keystroke";
     else if (this.editor.drawing && (this.tool === "arrow" || this.tool === "line")) {
       hint = `press f to flip${this.flipToggle ? " · flipped" : ""}`;
+    } else if (this.tool === "box") {
+      hint = `drag to draw a box · b: [${this.config.boxShape}] · s: [${this.config.lineStyle}]`;
+    } else if (this.tool === "arrow" || this.tool === "line") {
+      hint = `drag to draw ${this.tool} · s: [${this.config.lineStyle}] · f flips`;
+    } else if (this.tool === "eraser" || this.tool === "pencil") {
+      hint = `drag to ${this.tool === "eraser" ? "erase" : "draw freehand"} · [ ] brush size: ${this.config.brushSize}`;
     }
     // Every transient notice shares one slot: the hint's place, in the prompt's color. The quit
     // prompt outranks a toast, since it is the one the next keystroke acts on.
@@ -513,6 +524,32 @@ export class App implements Host, ToolbarHost {
     const rx = Math.max(0, this.width - right.length - 1);
     p.text(1, y, message ?? hint, message ? pal.warning : pal.muted, pal.bg, 0, rx - 2);
     p.text(rx, y, right, pal.muted, pal.bg);
+
+    if (!message && this.tool === "box" && !this.readOnly && !this.editor.textEntry) {
+      const shapePrefix = "drag to draw a box · b: ";
+      const shapeLabel = `[${this.config.boxShape}]`;
+      const shapeX = 1 + shapePrefix.length;
+      p.hotspots.push({
+        id: "status:cycleBoxShape",
+        x: shapeX,
+        y,
+        w: shapeLabel.length,
+        h: 1,
+        action: () => this.cycleBoxShape(),
+      });
+      const stylePrefix = " · s: ";
+      const styleX = shapeX + shapeLabel.length + stylePrefix.length;
+      const styleLabel = `[${this.config.lineStyle}]`;
+      p.hotspots.push({
+        id: "status:cycleLineStyle",
+        x: styleX,
+        y,
+        w: styleLabel.length,
+        h: 1,
+        action: () => this.cycleLineStyle(),
+      });
+    }
+
     p.chrome.push({ x: 0, y, w: this.width, h: 1 });
   }
 
@@ -607,6 +644,9 @@ export class App implements Host, ToolbarHost {
       this.closePanel();
       return;
     }
+    if (this.editor.textEntry) {
+      this.editor.flush();
+    }
     if (this.mode.kind !== "none") return;
     const cell = this.viewport.toCanvas(e.x, e.y);
     if (e.button === 1 || e.button === 2 || (e.button === 0 && (this.spaceHeld || e.modifiers.alt))) {
@@ -640,7 +680,13 @@ export class App implements Host, ToolbarHost {
     this.pressed = null;
     if (pressed) {
       const hot = hotspotAt(this.hotspots, e.x, e.y);
-      if (hot?.id === pressed) hot.action();
+      if (hot?.id === pressed) {
+        if (hot.id === "box" && this.tool === "box") {
+          this.cycleBoxShape();
+        } else {
+          hot.action();
+        }
+      }
       this.requestRender();
       return;
     }
@@ -692,7 +738,7 @@ export class App implements Host, ToolbarHost {
 
   private onKey(k: KeyEvent) {
     try {
-      this.handleKey(k);
+      this.handleKey(normalizeKeyEvent(k));
     } finally {
       this.requestRender();
     }
@@ -784,12 +830,24 @@ export class App implements Host, ToolbarHost {
     if (
       key === "[" ||
       key === "]" ||
-      ((this.tool === "eraser" || this.tool === "pencil") && (key === "-" || key === "+" || key === "="))
+      key === "х" ||
+      key === "ъ" ||
+      key === "Х" ||
+      key === "Ъ" ||
+      key === "-" ||
+      key === "+" ||
+      key === "="
     ) {
-      const delta = key === "]" || key === "+" || key === "=" ? 1 : -1;
+      const delta = key === "]" || key === "ъ" || key === "Ъ" || key === "+" || key === "=" ? 1 : -1;
       const next = Math.max(1, Math.min(9, this.config.brushSize + delta));
-      this.setBrushSize(next);
-      return this.toast(`brush ${next}`);
+      return this.setBrushSize(next);
+    }
+
+    if (this.tool === "box" && (key === "b" || key === "и")) {
+      return this.cycleBoxShape();
+    }
+    if ((this.tool === "box" || this.tool === "line" || this.tool === "arrow") && (key === "s" || key === "ы")) {
+      return this.cycleLineStyle();
     }
 
     const ch = printable(k);
@@ -975,6 +1033,7 @@ export class App implements Host, ToolbarHost {
 
   setTool(id: ToolId): void {
     if (this.readOnly) return this.toast("read-only");
+    this.editor.flush();
     this.editor.setTool(id);
     this.hint = "default";
     this.chipsUntil = Date.now() + CHIP_MS;
@@ -987,6 +1046,7 @@ export class App implements Host, ToolbarHost {
   }
 
   private togglePanel(id: PanelId, anchorX: number) {
+    this.editor.flush();
     if (this.panel === id) return this.closePanel();
     if (id === "files") {
       this.drawings = this.store.list();
@@ -1402,7 +1462,35 @@ export class App implements Host, ToolbarHost {
     this.config.brushSize = Math.max(1, Math.min(9, Math.round(size)));
     this.editor.brushSize = this.config.brushSize;
     this.persistConfig();
+    this.toast(`brush ${this.config.brushSize}`);
     this.requestRender();
+  }
+
+  cycleBoxShape(delta = 1): void {
+    const shapes = BOX_SHAPES;
+    const idx = shapes.indexOf(this.config.boxShape);
+    const nextIdx = ((idx + delta) % shapes.length + shapes.length) % shapes.length;
+    const next = shapes[nextIdx]!;
+    this.updateConfig({ boxShape: next });
+    this.toast(`box: ${next}`);
+  }
+
+  cycleLineStyle(delta = 1): void {
+    const styles = LINE_STYLES;
+    const idx = styles.indexOf(this.config.lineStyle);
+    const nextIdx = ((idx + delta) % styles.length + styles.length) % styles.length;
+    const next = styles[nextIdx]!;
+    this.updateConfig({ lineStyle: next });
+    this.toast(`line: ${next}`);
+  }
+
+  cycleFontStyle(delta = 1): void {
+    const fonts = TEXT_FONT_STYLES;
+    const idx = fonts.indexOf(this.config.fontStyle);
+    const nextIdx = ((idx + delta) % fonts.length + fonts.length) % fonts.length;
+    const next = fonts[nextIdx]!;
+    this.updateConfig({ fontStyle: next });
+    this.toast(`font: ${next}`);
   }
 
   // history
@@ -1480,6 +1568,11 @@ export class App implements Host, ToolbarHost {
     if (this.readOnly && /^app:(new|rename|fork|delete|clear|import|paste|cut|duplicate|undo|redo|undoAll|align|distribute)/.test(id)) {
       return this.toast("read-only");
     }
+    if (id === "tool:cycleBoxShape") return this.cycleBoxShape();
+    if (id === "tool:cycleLineStyle") return this.cycleLineStyle();
+    if (id === "tool:cycleFontStyle") return this.cycleFontStyle();
+    if (id === "tool:brushIncrease") return this.setBrushSize(this.config.brushSize + 1);
+    if (id === "tool:brushDecrease") return this.setBrushSize(this.config.brushSize - 1);
     if (id.startsWith("tool:")) return this.setTool(id.slice(5) as ToolId);
     if (this.panel === "palette") this.closePanel();
 

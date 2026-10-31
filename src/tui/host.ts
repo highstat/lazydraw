@@ -79,6 +79,10 @@ export interface Host {
   setBrushSize(size: number): void;
   setSettingsPage(page: number): void;
   readonly settingsPage: number;
+  showAllThemes?: boolean;
+  cycleBoxShape?(delta?: number): void;
+  cycleLineStyle?(delta?: number): void;
+  cycleFontStyle?(delta?: number): void;
   recenter(): void;
   copyPath(): void;
   showPaths(): void;

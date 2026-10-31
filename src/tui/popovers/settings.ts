@@ -6,6 +6,7 @@ import {
   FILE_SORTS,
   GRID_STYLES,
   LINE_STYLES,
+  PRIMARY_THEMES,
   TEXT_FONT_STYLES,
   TEXT_MODES,
   THEME_CHOICES,
@@ -18,15 +19,16 @@ import { flow, flowHeight, placePopover, rule } from "./common";
 const WIDTH = 66;
 export const SETTINGS_PAGES = 3;
 
-export function settingsHeight(): number {
-  return 2 + 1 + flowHeight(WIDTH, [...THEME_CHOICES], "theme: ") + 6;
+export function settingsHeight(showAll = false): number {
+  const choices = showAll ? [...THEME_CHOICES, "collapse"] : [...PRIMARY_THEMES, "more"];
+  return 2 + 1 + flowHeight(WIDTH, choices, "theme: ") + 7;
 }
 
 const onOff = (value: boolean) => (value ? "on" : "off");
 
 export function renderSettings(p: Painter, host: Host, anchorX: number, top: number): void {
   const page = ((host.settingsPage % SETTINGS_PAGES) + SETTINGS_PAGES) % SETTINGS_PAGES;
-  const h = page === 0 ? settingsHeight() : 24;
+  const h = page === 0 ? settingsHeight(host.showAllThemes) : 24;
   const r = placePopover(p, anchorX, top, WIDTH, Math.min(h, p.height - top - 1));
   p.panel(r);
   const config = host.config;
@@ -47,18 +49,44 @@ export function renderSettings(p: Painter, host: Host, anchorX: number, top: num
       })),
       "grid:  ",
     );
-    y = flow(
-      p,
-      r,
-      y,
-      THEME_CHOICES.map((t) => ({
+    const showAll = host.showAllThemes ?? false;
+    const baseThemes = showAll
+      ? THEME_CHOICES
+      : PRIMARY_THEMES.includes(config.theme)
+        ? PRIMARY_THEMES
+        : [...PRIMARY_THEMES, config.theme];
+
+    const themeButtons: { id: string; label: string; active: boolean; action: () => void }[] =
+      baseThemes.map((t) => ({
         id: `settings:theme:${t}`,
         label: t,
         active: config.theme === t,
         action: () => host.setTheme(t),
-      })),
-      "theme: ",
-    );
+      }));
+
+    if (!showAll) {
+      themeButtons.push({
+        id: "settings:theme:toggleMore",
+        label: `+ more (${THEME_CHOICES.length - PRIMARY_THEMES.length})…`,
+        active: false,
+        action: () => {
+          host.showAllThemes = true;
+          host.requestRender();
+        },
+      });
+    } else {
+      themeButtons.push({
+        id: "settings:theme:toggleLess",
+        label: "- collapse",
+        active: false,
+        action: () => {
+          host.showAllThemes = false;
+          host.requestRender();
+        },
+      });
+    }
+
+    y = flow(p, r, y, themeButtons, "theme: ");
     y = flow(
       p,
       r,

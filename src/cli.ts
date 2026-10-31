@@ -286,6 +286,10 @@ async function main() {
   // terminal too slow to answer in time still gets its colors from the app, a frame or two later.
   const term = config.theme === "terminal" ? await detectTerminalColorsSoon(renderer, PALETTE_WAIT_MS) : null;
 
+  // Request Kitty keyboard protocol enhancement (push mode 1: disambiguate modifiers)
+  // so terminals supporting Kitty keyboard protocol report Super/Cmd and Shift combinations.
+  process.stdout.write("\x1b[>1u");
+
   let app: App | null = null;
   let exiting = false;
   const exit = (code: number, error?: unknown) => {
@@ -296,6 +300,9 @@ async function main() {
     } catch {
       // Still restore the terminal below.
     }
+    try {
+      process.stdout.write("\x1b[<u");
+    } catch {}
     renderer.destroy();
     if (error) console.error(error);
     process.exit(code);

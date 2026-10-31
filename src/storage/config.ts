@@ -34,6 +34,20 @@ export type ThemeChoice = ThemeName;
 
 export const THEME_CHOICES: readonly ThemeChoice[] = ["terminal", ...SCHEME_NAMES];
 
+/** The top ~10 curated themes displayed by default in settings. */
+export const PRIMARY_THEMES: readonly ThemeChoice[] = [
+  "terminal",
+  "dracula",
+  "nord",
+  "tokyo-night",
+  "catppuccin-mocha",
+  "gruvbox",
+  "monokai",
+  "solarized-dark",
+  "cyberpunk",
+  "paper",
+];
+
 export interface Config {
   theme: ThemeChoice;
   grid: GridStyle;

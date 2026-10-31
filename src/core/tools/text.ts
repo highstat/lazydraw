@@ -52,6 +52,9 @@ export class TextTool implements Tool {
   }
 
   start(p: Vector): void {
+    if (this.edit || this.layer) {
+      this.commit();
+    }
     if (this.ctx.textMode === "layer") {
       this.cursor = p;
       this.lineStart = p;

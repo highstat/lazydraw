@@ -67,6 +67,7 @@ export class Editor implements ToolContext {
 
   setTool(id: ToolId): void {
     if (id === this.toolId) return;
+    this.flush();
     this.cancelGesture();
     this.current.cleanup();
     this.toolId = id;

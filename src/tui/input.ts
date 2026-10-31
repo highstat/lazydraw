@@ -45,3 +45,77 @@ export function altDigit(k: KeyEvent): number | null {
 }
 
 export const isCtrl = (k: KeyEvent, name: string) => k.ctrl && !k.meta && k.name === name;
+
+const KITTY_CSI_U = /^\x1b\[(\d+)(?:;(\d+))?(?::(\d+))?u$/;
+const MODIFY_OTHER_KEYS = /^\x1b\[27;(\d+);(\d+)~$/;
+
+function codepointToKeyName(cp: number): string {
+  if (cp === 13) return "return";
+  if (cp === 27) return "escape";
+  if (cp === 9) return "tab";
+  if (cp === 32) return "space";
+  if (cp === 127 || cp === 8) return "backspace";
+  if (cp >= 65 && cp <= 90) return String.fromCharCode(cp + 32); // lowercase
+  if (cp >= 97 && cp <= 122) return String.fromCharCode(cp);
+  if (cp >= 48 && cp <= 57) return String.fromCharCode(cp);
+  return String.fromCodePoint(cp);
+}
+
+const IS_MAC = process.platform === "darwin";
+
+/**
+ * Normalizes terminal key events. When Kitty keyboard protocol or modifyOtherKeys sends
+ * CSI sequences (e.g. \x1b[122;9u for Cmd+Z), ensures `name` and modifiers (super, meta, ctrl, shift)
+ * are populated accurately on macOS and Linux.
+ */
+export function normalizeKeyEvent(k: KeyEvent): KeyEvent {
+  const seq = k.sequence || k.raw || "";
+
+  const kittyMatch = seq.match(KITTY_CSI_U);
+  if (kittyMatch) {
+    const cp = parseInt(kittyMatch[1]!, 10);
+    const modNum = kittyMatch[2] ? parseInt(kittyMatch[2], 10) : 1;
+    const mask = Math.max(0, modNum - 1);
+    const shift = !!(mask & 1);
+    const alt = !!(mask & 2);
+    const ctrl = !!(mask & 4);
+    const sup = !!(mask & 8);
+    const hyper = !!(mask & 16);
+    const meta = !!(mask & 32) || (IS_MAC && sup);
+
+    k.name = codepointToKeyName(cp);
+    k.shift = k.shift || shift;
+    k.option = k.option || alt;
+    k.ctrl = k.ctrl || ctrl;
+    k.super = k.super || sup;
+    k.meta = k.meta || meta || (IS_MAC && sup);
+    (k as any).hyper = (k as any).hyper || hyper;
+    return k;
+  }
+
+  const mokMatch = seq.match(MODIFY_OTHER_KEYS);
+  if (mokMatch) {
+    const mask = Math.max(0, parseInt(mokMatch[1]!, 10) - 1);
+    const cp = parseInt(mokMatch[2]!, 10);
+    const shift = !!(mask & 1);
+    const alt = !!(mask & 2);
+    const ctrl = !!(mask & 4);
+    const sup = !!(mask & 8);
+    const meta = !!(mask & 32) || (IS_MAC && sup);
+
+    k.name = codepointToKeyName(cp);
+    k.shift = k.shift || shift;
+    k.option = k.option || alt;
+    k.ctrl = k.ctrl || ctrl;
+    k.super = k.super || sup;
+    k.meta = k.meta || meta || (IS_MAC && sup);
+    return k;
+  }
+
+  if (IS_MAC && (k.super || (k as any).hyper)) {
+    k.super = true;
+    k.meta = true;
+  }
+
+  return k;
+}
