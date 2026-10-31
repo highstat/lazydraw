@@ -1,4 +1,5 @@
 // Export formatting. Wrapper semantics ported from ASCIIFlow (client/export.tsx), MIT © Lewis Hemens.
+import { Resvg } from "@resvg/resvg-js";
 import { BASIC } from "./glyphs";
 import type { LayerView } from "./layer";
 import { layerToText } from "./text";
@@ -20,7 +21,7 @@ export const WRAPPERS = [
 
 export type Wrapper = (typeof WRAPPERS)[number]["id"];
 export type Charset = "extended" | "basic";
-export type ExportFormat = "txt" | "svg" | "html";
+export type ExportFormat = "txt" | "svg" | "html" | "png";
 
 /** Monospace families offered for SVG/HTML exports. The TUI itself uses the terminal font. */
 export const FONT_FAMILIES = [
@@ -63,7 +64,7 @@ export function isWrapper(value: string): value is Wrapper {
 }
 
 export function isExportFormat(value: string): value is ExportFormat {
-  return value === "txt" || value === "svg" || value === "html";
+  return value === "txt" || value === "svg" || value === "html" || value === "png";
 }
 
 export function isFontFamily(value: string): value is FontFamily {
@@ -175,13 +176,27 @@ export function exportHtml(text: string, config: ExportConfig): string {
   ].join("\n");
 }
 
+/**
+ * Renders the drawing directly into a crisp high-resolution PNG byte buffer.
+ */
+export function exportPng(layer: LayerView, config: ExportConfig): Uint8Array {
+  const text = layerToText(layer, null, true);
+  const svg = exportSvg(text, config);
+  const resvg = new Resvg(svg, {
+    fitTo: { mode: "zoom", value: 2 },
+  });
+  return resvg.render().asPng();
+}
+
 export interface RenderedExport {
   text: string;
+  bytes?: Uint8Array;
   extension: string;
 }
 
 /** Renders the drawing in the configured format. Wrappers only apply to plain text. */
 export function renderExport(layer: LayerView, config: ExportConfig): RenderedExport {
+  if (config.format === "png") return { text: "[binary PNG data]", bytes: exportPng(layer, config), extension: "png" };
   if (config.format === "svg") return { text: exportSvg(layerToText(layer, null, true), config), extension: "svg" };
   if (config.format === "html") return { text: exportHtml(layerToText(layer, null, true), config), extension: "html" };
   return { text: exportText(layer, config), extension: "txt" };

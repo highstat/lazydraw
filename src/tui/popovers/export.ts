@@ -27,6 +27,7 @@ export function renderExport(p: Painter, host: Host, anchorX: number, top: numbe
     [
       { id: "exp:format:txt", label: "txt", active: cfg.format === "txt", action: () => host.setExport({ format: "txt" }) },
       { id: "exp:format:svg", label: "svg", active: cfg.format === "svg", action: () => host.setExport({ format: "svg" }) },
+      { id: "exp:format:png", label: "png", active: cfg.format === "png", action: () => host.setExport({ format: "png" }) },
       { id: "exp:format:html", label: "html", active: cfg.format === "html", action: () => host.setExport({ format: "html" }) },
       {
         id: "exp:selection",

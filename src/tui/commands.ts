@@ -25,6 +25,7 @@ export const COMMANDS: readonly CommandDef[] = [
   { id: "app:history", label: "Version history", group: "File", binding: "primary+h" },
   { id: "app:importText", label: "Import text file…", group: "File", binding: "primary+i" },
   { id: "app:importMedia", label: "Import image / video…", group: "File", binding: "primary+shift+i" },
+  { id: "app:insertTable", label: "Insert ASCII table…", group: "Edit", binding: "primary+t" },
   { id: "app:export", label: "Export panel", group: "File", binding: "primary+e" },
   { id: "app:copyExport", label: "Copy export", group: "Export" },
   { id: "app:copyMarkdown", label: "Copy as Markdown fence", group: "Export" },

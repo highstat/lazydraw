@@ -25,7 +25,7 @@ usage:
   lazydraw media <image|video> [name] [--width 80] [--at 1.5] [--invert]
                                new drawing from a photo or video frame (needs ffmpeg)
   lazydraw export <name|path> [--basic] [--comment <style>] [--fenced]
-                               [--format txt|svg|html] [--font <family>] [--font-size <n>]
+                               [--format txt|svg|png|html] [--font <family>] [--font-size <n>]
                                [-o out.txt]
   lazydraw list                    list saved drawings
   lazydraw paths                   show where drawings and config live
@@ -88,6 +88,7 @@ function exportCommand(store: DrawingStore, args: string[]) {
       output: { type: "string", short: "o" },
       format: { type: "string" },
       svg: { type: "boolean" },
+      png: { type: "boolean" },
       html: { type: "boolean" },
       font: { type: "string" },
       "font-size": { type: "string" },
@@ -100,7 +101,7 @@ function exportCommand(store: DrawingStore, args: string[]) {
   const comment = values.comment ?? "none";
   const wrapper = COMMENT_ALIASES[comment] ?? comment;
   if (!isWrapper(wrapper)) fail(`unknown comment style "${comment}"`);
-  const format = values.svg ? "svg" : values.html ? "html" : (values.format ?? "txt");
+  const format = values.png ? "png" : values.svg ? "svg" : values.html ? "html" : (values.format ?? "txt");
   if (!isExportFormat(format)) fail(`unknown export format "${format}"`);
   if (values.font && !isFontFamily(values.font)) fail(`unknown font "${values.font}" (try: ${FONT_FAMILIES.join(", ")})`);
   const fontSize = values["font-size"] ? Number(values["font-size"]) : undefined;
@@ -115,10 +116,16 @@ function exportCommand(store: DrawingStore, args: string[]) {
     fontFamily: values.font && isFontFamily(values.font) ? values.font : base.fontFamily,
     fontSize: fontSize ?? base.fontSize,
   };
-  const text = renderExport(store.loadSync(path).layer, config).text;
-  const output = text.endsWith("\n") ? text : `${text}\n`;
-  if (values.output) writeFileSync(values.output, output);
-  else process.stdout.write(output);
+  const rendered = renderExport(store.loadSync(path).layer, config);
+  if (rendered.bytes) {
+    if (values.output) writeFileSync(values.output, rendered.bytes);
+    else process.stdout.write(rendered.bytes);
+  } else {
+    const text = rendered.text;
+    const output = text.endsWith("\n") ? text : `${text}\n`;
+    if (values.output) writeFileSync(values.output, output);
+    else process.stdout.write(output);
+  }
 }
 
 function systemClipboard(renderer: CliRenderer): Clipboard {

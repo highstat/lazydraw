@@ -17,9 +17,11 @@ import {
 import { Layer, StackedLayers } from "../layer";
 import { arrowFor, connectEndpoints, line } from "../route";
 import { snap } from "../snap";
+import { findBoxes } from "../connector";
+import type { DrawStyle, LineStyle } from "../style";
 import { layerToText, textToLayer } from "../text";
 import { Vector } from "../vector";
-import { drawBoxStyled } from "./box";
+import { drawBox, drawBoxStyled } from "./box";
 import { MoveTool } from "./move";
 import { KEY, type HoverHint, type Mods, type Tool, type ToolContext } from "./tool";
 
@@ -121,7 +123,10 @@ export class SelectTool implements Tool {
       return;
     }
 
-    if (isBoxDrawing(value)) {
+    const isStraightLine = (v: string | null) =>
+      v === "─" || v === "│" || v === "═" || v === "║" || v === "╌" || v === "╎" || v === "-" || v === "|";
+
+    if (isStraightLine(value)) {
       const box = findBox(committed, p);
       if (box && m.shift) {
         this.addGroup(cellsInBox(committed, box), box, true);
@@ -533,6 +538,84 @@ export class SelectTool implements Tool {
       return true;
     }
     return false;
+  }
+
+  /** Restyles selected boxes and lines with the given box shape and/or line style. */
+  restyle(style: Partial<DrawStyle>): boolean {
+    if (!this.hasSelection && !this.selectBox) return false;
+    const targetBoxShape = style.box ?? this.ctx.style.box;
+    const targetLineStyle = style.line ?? this.ctx.style.line;
+
+    let boxes = [...this.boxes];
+    if (boxes.length === 0 && this.selectBox) {
+      const found = findBoxes(this.canvas.committed);
+      boxes = found.filter(
+        (b) => this.selectBox!.contains(b.topLeft()) && this.selectBox!.contains(b.bottomRight()),
+      );
+      if (boxes.length === 0 && this.selectBox.width() >= 2 && this.selectBox.height() >= 2) {
+        boxes = [this.selectBox];
+      }
+    }
+
+    const combined = new Layer();
+
+    if (style.line) {
+      const lineMap: Record<LineStyle, { h: string; v: string }> = {
+        single: { h: "─", v: "│" },
+        double: { h: "═", v: "║" },
+        dashed: { h: "╌", v: "╎" },
+      };
+      const cornerMap: Record<string, string> =
+        style.line === "double"
+          ? {
+              "┌": "╔", "┐": "╗", "┘": "╝", "└": "╚",
+              "├": "╠", "┤": "╣", "┬": "╦", "┴": "╩", "┼": "╬",
+            }
+          : {
+              "╔": "┌", "╗": "┐", "╝": "┘", "╚": "└",
+              "╠": "├", "╣": "┤", "╦": "┬", "╩": "┴", "╬": "┼",
+            };
+
+      const cells =
+        this.selectedCells.length > 0
+          ? this.selectedCells
+          : this.selectBox
+            ? cellsInBox(this.canvas.committed, this.selectBox)
+            : [];
+      for (const cell of cells) {
+        const val = this.canvas.committed.get(cell);
+        if (!val) continue;
+        if (["─", "═", "╌", "-"].includes(val)) {
+          combined.set(cell, lineMap[style.line].h);
+        } else if (["│", "║", "╎", "|"].includes(val)) {
+          combined.set(cell, lineMap[style.line].v);
+        } else if (cornerMap[val]) {
+          combined.set(cell, cornerMap[val]);
+        }
+      }
+    }
+
+    for (const b of boxes) {
+      const boxLayer = drawBox(b, {
+        box: targetBoxShape,
+        line: targetLineStyle,
+        arrow: "solid",
+      });
+      for (const [pos, val] of boxLayer.entries()) {
+        combined.set(pos, val);
+      }
+    }
+
+    if (combined.size() === 0) return false;
+    if (!this.canvas.commit(combined)) return false;
+
+    for (const g of this.groups) {
+      if (g.isBox) {
+        g.cells = cellsInBox(this.canvas.committed, g.box);
+      }
+    }
+    this.recomputeSelection(true);
+    return true;
   }
 
   /** Switching away drops the selection and any in-progress state. */

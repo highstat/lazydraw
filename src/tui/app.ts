@@ -20,6 +20,7 @@ import { findBox } from "../core/entity";
 import { type ExportConfig, exportText, renderExport, type RenderedExport } from "../core/export";
 import type { Layer } from "../core/layer";
 import { mediaToLayer } from "../core/media";
+import { generateTable } from "../core/table";
 import { textSize, textToLayer } from "../core/text";
 import { KEY, mods, type HoverHint, type Mods } from "../core/tools/tool";
 import { Vector } from "../core/vector";
@@ -51,7 +52,7 @@ import { renderMenu } from "./popovers/menu";
 import { renderPalette } from "./popovers/palette";
 import { renderSettings } from "./popovers/settings";
 import { detectTerminalColors, palette, type Palette, type TerminalColors } from "./theme";
-import { type ItemId, layoutToolbar, type PanelId, renderToolbar, type ToolbarHost } from "./toolbar";
+import { type ItemId, layoutToolbar, type PanelId, renderToolbar, type ToolbarHost, type ToolbarLayout } from "./toolbar";
 
 export interface OpenDrawing {
   path: string;
@@ -466,6 +467,7 @@ export class App implements Host, ToolbarHost {
       cursorOn: !this.config.cursorBlink || Math.floor(Date.now() / 500) % 2 === 0,
     });
     renderToolbar(p, this, layout);
+    this.paintFloatingContextBar(p, layout);
     if (this.panel) {
       const render = {
         files: renderFiles,
@@ -492,6 +494,95 @@ export class App implements Host, ToolbarHost {
     }
     this.hotspots = p.hotspots;
     this.chrome = p.chrome;
+  }
+
+  private paintFloatingContextBar(p: Painter, layout: ToolbarLayout) {
+    const sel = this.editor.canvas.selection;
+    if (!sel || this.editor.drawing || this.dialog || this.panel) return;
+
+    const screenLeft = sel.left() - this.viewport.origin.x;
+    const screenTop = sel.top() - this.viewport.origin.y;
+    const screenRight = sel.right() - this.viewport.origin.x;
+    const screenBottom = sel.bottom() - this.viewport.origin.y;
+
+    if (screenRight < 0 || screenLeft >= this.width || screenBottom < layout.bottom || screenTop >= this.height - 1) {
+      return;
+    }
+
+    const { pal } = p;
+    const shapeBtn = `[Shape: ${this.config.boxShape}]`;
+    const styleBtn = `[Style: ${this.config.lineStyle}]`;
+    const dupBtn = "[Dup]";
+    const alignBtn = "[Align]";
+    const delBtn = "[Del]";
+
+    const contentWidth =
+      shapeBtn.length + 1 + styleBtn.length + 1 + dupBtn.length + 1 + alignBtn.length + 1 + delBtn.length + 2;
+    const barW = Math.min(this.width - 2, contentWidth);
+    const barH = 1;
+
+    let barY = screenTop - 1;
+    if (barY <= layout.bottom) {
+      barY = screenBottom + 1;
+    }
+    if (barY >= this.height - 1) {
+      barY = this.height - 2;
+    }
+    if (barY <= layout.bottom) {
+      barY = layout.bottom + 1;
+    }
+
+    let barX = Math.round(screenLeft + (sel.width() - barW) / 2);
+    barX = Math.max(1, Math.min(this.width - barW - 1, barX));
+
+    p.fill({ x: barX, y: barY, w: barW, h: barH }, pal.tbBg);
+    p.chrome.push({ x: barX, y: barY, w: barW, h: barH });
+
+    let curX = barX + 1;
+    curX = p.button("minibar:shape", curX, barY, shapeBtn, () => this.cycleBoxShape(), {
+      fg: pal.accent,
+      bg: pal.tbBg,
+    });
+    curX += 1;
+    curX = p.button("minibar:style", curX, barY, styleBtn, () => this.cycleLineStyle(), {
+      fg: pal.accent,
+      bg: pal.tbBg,
+    });
+    curX += 1;
+    curX = p.button("minibar:dup", curX, barY, dupBtn, () => this.duplicateSelection(), {
+      fg: pal.tbLabel,
+      bg: pal.tbBg,
+    });
+    curX += 1;
+    curX = p.button(
+      "minibar:align",
+      curX,
+      barY,
+      alignBtn,
+      () => {
+        this.editor.select.align("center");
+        this.toast("aligned center");
+      },
+      {
+        fg: pal.tbLabel,
+        bg: pal.tbBg,
+      },
+    );
+    curX += 1;
+    curX = p.button(
+      "minibar:del",
+      curX,
+      barY,
+      delBtn,
+      () => {
+        this.editor.select.eraseSelection();
+        this.toast("deleted selection");
+      },
+      {
+        fg: pal.warning,
+        bg: pal.tbBg,
+      },
+    );
   }
 
   private paintStatus(p: Painter) {
@@ -1321,6 +1412,28 @@ export class App implements Host, ToolbarHost {
     }
   }
 
+  insertTablePrompt(): void {
+    if (this.readOnly) return this.toast("read-only");
+    this.prompt("insert table", "size (cols x rows)", "3x3", (value) => {
+      const match = value.trim().match(/^(\d+)\s*[xX, ]\s*(\d+)$/);
+      if (!match) return "expected format: <cols>x<rows> (e.g. 3x3)";
+      const cols = parseInt(match[1]!, 10);
+      const rows = parseInt(match[2]!, 10);
+      if (cols < 1 || cols > 20) return "cols must be 1..20";
+      if (rows < 1 || rows > 50) return "rows must be 1..50";
+
+      const tableText = generateTable({
+        cols,
+        rows,
+        colWidth: 10,
+        lineStyle: this.config.lineStyle,
+      });
+      this.pasteText(tableText);
+      this.toast(`table ${cols}x${rows} inserted`);
+      return null;
+    });
+  }
+
   /** Decodes one image/video frame with ffmpeg and starts placing it on the canvas. */
   private importMediaPath(path: string): string | null {
     let layer: Layer;
@@ -1413,7 +1526,11 @@ export class App implements Host, ToolbarHost {
     this.prompt("save export", "file", defaultName, (value) => {
       const path = resolve(value.replace(/^~(?=$|\/)/, homedir()));
       try {
-        writeFileSync(path, rendered.text.endsWith("\n") ? rendered.text : `${rendered.text}\n`);
+        if (rendered.bytes) {
+          writeFileSync(path, Buffer.from(rendered.bytes));
+        } else {
+          writeFileSync(path, rendered.text.endsWith("\n") ? rendered.text : `${rendered.text}\n`);
+        }
       } catch (e) {
         return `can't write: ${(e as Error).message}`;
       }
@@ -1430,7 +1547,11 @@ export class App implements Host, ToolbarHost {
     });
     if (!path) return this.saveExport();
     try {
-      writeFileSync(path, rendered.text.endsWith("\n") ? rendered.text : `${rendered.text}\n`);
+      if (rendered.bytes) {
+        writeFileSync(path, Buffer.from(rendered.bytes));
+      } else {
+        writeFileSync(path, rendered.text.endsWith("\n") ? rendered.text : `${rendered.text}\n`);
+      }
       this.toast(`saved ${path}`);
     } catch (e) {
       this.toast(`can't write: ${(e as Error).message}`);
@@ -1472,6 +1593,9 @@ export class App implements Host, ToolbarHost {
     const nextIdx = ((idx + delta) % shapes.length + shapes.length) % shapes.length;
     const next = shapes[nextIdx]!;
     this.updateConfig({ boxShape: next });
+    if (this.editor.canvas.selection != null) {
+      this.editor.select.restyle({ box: next });
+    }
     this.toast(`box: ${next}`);
   }
 
@@ -1481,6 +1605,9 @@ export class App implements Host, ToolbarHost {
     const nextIdx = ((idx + delta) % styles.length + styles.length) % styles.length;
     const next = styles[nextIdx]!;
     this.updateConfig({ lineStyle: next });
+    if (this.editor.canvas.selection != null) {
+      this.editor.select.restyle({ line: next });
+    }
     this.toast(`line: ${next}`);
   }
 
@@ -1623,6 +1750,8 @@ export class App implements Host, ToolbarHost {
         if (text) this.pasteText(text);
         return;
       }
+      case "app:insertTable":
+        return this.insertTablePrompt();
       case "app:selectAll":
         this.setTool("select");
         this.editor.select.selectAll();
