@@ -5,7 +5,7 @@
 
 ```
   ┌─────────────────────────────────────────────────────────────────┐
-  │ ≡ │ 💾 │ box select arrow line text eraser │ export │ ⟲ ⟳ │ ⚙ │ ?  │
+  │ ≡  │ box select arrow line text eraser │ export │ ⟲ ⟳ │ ⚙ │ ?  │
   └─────────────────────────────────────────────────────────────────┘
 
   ┌──────────┐      ┌──────────┐       ┌─────────┐      ┌─────────────┐
@@ -26,42 +26,41 @@
 
 ## What's Changed in this Fork (New Features & Enhancements)
 
-- ⚡ **First-Class macOS `Cmd+Z` / `Cmd+Shift+Z` Undo/Redo**:
+- **First-Class macOS `Cmd+Z` / `Cmd+Shift+Z` Undo/Redo**:
   - Full Kitty Keyboard Protocol progressive enhancement (`\x1b[>1u` and CSI `u` escape sequence normalization).
   - Works natively with modern terminals: Ghostty, Kitty, WezTerm, iTerm2, Alacritty, and Apple Terminal.
   - Sanitized modifier parsing so modifier keys don't interfere with Backspace or Delete.
 
-- 🪄 **Floating Context Mini-Bar over Selections**:
+- **Floating Context Mini-Bar over Selections**:
   - 1-click contextual action bar floating directly above the active selection:
     `[Shape: rect]` · `[Style: single]` · `[Dup]` · `[Align]` · `[Del]` · `[✕]`.
   - Can be dismissed instantly via the `[✕]` button, toggled in Settings (`Ctrl+,`), or via Command Palette (`view:toggleMiniBar`).
 
-- 📊 **Contextual ASCII & Markdown Table Generator (`Cmd+T` / `app:insertTable`)**:
+- **Contextual ASCII & Markdown Table Generator (`Cmd+T` / `app:insertTable`)**:
   - Insert customizable grid tables (`<cols>x<rows>`) with single, double, or dashed borders.
   - **Smart Placement**: Automatically creates the table directly at your active selection or mouse cursor instead of viewport center.
 
-- 🖼️ **Native High-Resolution PNG Export (`--format png`)**:
+- **Native High-Resolution PNG Export (`--format png`)**:
   - Export diagrams directly to clean, retina-ready PNG images powered by `@resvg/resvg-js`.
   - Available both in CLI (`lazydraw export <name> --format png -o diagram.png`) and inside the interactive TUI export panel.
 
-- 💾 **Transparent Saving & Workflow Indicators**:
-  - **Toolbar `💾` Chip**: Highlights in amber whenever there are unsaved changes.
+- **Transparent Saving & Workflow Indicators**:
   - **Interactive Status Bar Indicator**: Click or inspect `[● Unsaved (Save)]` / `[✓ Saved]`.
   - **Save As... Dialog (`Cmd+Shift+S`)**: Save drawings to custom names and paths on disk.
   - **Quick Save Actions**: Immediate `[save]` and `[save as...]` buttons inside the file browser popover.
 
-- ✍️ **Reliable Text Tool & Auto-Commit**:
+- **Reliable Text Tool & Auto-Commit**:
   - Text input is never lost or discarded when switching tools or clicking another position; uncommitted text automatically commits to the canvas.
 
-- 🎨 **Curated & Collapsible Themes**:
+- **Curated & Collapsible Themes**:
   - Shows top 10 popular themes by default (`terminal`, `tokyo-night`, `catppuccin`, `dracula`, `nord`, `gruvbox`, `one-dark`, `monokai`, `night-owl`, `github-light`).
   - Click `[+36 more...]` to view the full library of 46 themes.
 
-- 🔤 **Full Unicode & Cyrillic Support**:
+- **Full Unicode & Cyrillic Support**:
   - Drawing file names preserve Russian and international Unicode characters without corrupting `.ld.json` paths.
   - Brush / eraser size shortcuts support both `[` / `]` and Russian keyboard layout `х` / `ъ` with visual feedback toasts.
 
-- ⌫ **Full Selection Deletion**:
+- **Full Selection Deletion**:
   - `Ctrl/Cmd+A` followed by `Del` or `Backspace` reliably wipes the entire selection across all tools.
 
 ---
