@@ -5,7 +5,7 @@
 
 ```
   ┌─────────────────────────────────────────────────────────────────┐
-  │ ≡  │ box select arrow line text eraser │ export │ ⟲ ⟳ │ ⚙ │ ?  │
+  │ ≡ │ box select arrow line text eraser │ export │ ⟲ ⟳ │ ⚙ │ ?    │
   └─────────────────────────────────────────────────────────────────┘
 
   ┌──────────┐      ┌──────────┐       ┌─────────┐      ┌─────────────┐
@@ -67,26 +67,53 @@
 
 ## Install
 
+### 1-Line Installer (Zero Dependencies, Standalone Binary)
+
+No Bun, Node.js, or external runtimes required. Automatically downloads the compiled binary for your OS and architecture:
+
+**macOS & Linux**:
+```sh
+curl -fsSL https://raw.githubusercontent.com/highstat/lazydraw/main/install.sh | bash
+```
+
+**Windows (PowerShell)**:
+```powershell
+irm https://raw.githubusercontent.com/highstat/lazydraw/main/install.ps1 | iex
+```
+
+---
+
+### Via npm / npx
+
+```sh
+npm install -g @highstat/lazydraw
+# or run directly without installing:
+npx @highstat/lazydraw
+```
+
+---
+
+### Via Bun
+
+```sh
+# Run instantly from GitHub
+bunx github:highstat/lazydraw
+
+# Install globally
+bun install -g github:highstat/lazydraw
+```
+
+---
+
+### From Source
+
 Requires [Bun](https://bun.sh) (v1.3+).
 
 ```sh
-# Clone repository
 git clone https://github.com/highstat/lazydraw.git
 cd lazydraw
-
-# Install dependencies
 bun install
-
-# Run locally or compile standalone binary
-bun start
-bun run build # creates standalone binary at dist/lazydraw
-```
-
-Or install globally with Bun:
-
-```sh
-bun install -g .
-lazydraw
+bun run build # builds standalone binary at dist/lazydraw
 ```
 
 ---

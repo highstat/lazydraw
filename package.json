@@ -1,8 +1,11 @@
 {
-  "name": "lazydraw",
-  "version": "0.1.1",
+  "name": "@highstat/lazydraw",
+  "version": "0.2.0",
   "description": "lazydraw is a terminal ASCII editor for drawing quick diagrams and sketches",
   "type": "module",
+  "publishConfig": {
+    "access": "public"
+  },
   "license": "MIT",
   "author": "highstat (https://github.com/highstat)",
   "homepage": "https://github.com/highstat/lazydraw#readme",
