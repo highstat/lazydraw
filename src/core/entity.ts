@@ -1,7 +1,7 @@
 // Entity detection (words, line tips, boxes) and moves that keep attached
 // lines connected. Ported from ASCIIFlow (client/draw/entity.ts), MIT © Lewis Hemens.
 import { Box, boundingBox } from "./box";
-import { ARROW_FOR, connections, connects, isArrow, isBoxDrawing, UNICODE } from "./glyphs";
+import { ARROW_FOR, connections, connects, isArrow, isBoxDrawing, isCorner, isStraight, UNICODE } from "./glyphs";
 import { isErase, Layer } from "./layer";
 import { snap } from "./snap";
 import { Direction, Vector } from "./vector";
@@ -41,10 +41,10 @@ export interface LineTip {
 export function detectLineTip(layer: Layer, p: Vector): LineTip | null {
   const value = layer.get(p);
   let axis: LineTip["axis"];
-  if (value === H) axis = "horizontal";
-  else if (value === V) axis = "vertical";
+  if (isStraight(value, true)) axis = "horizontal";
+  else if (isStraight(value, false)) axis = "vertical";
   else if (isArrow(value)) {
-    axis = value === UNICODE.arrowLeft || value === UNICODE.arrowRight ? "horizontal" : "vertical";
+    axis = value === UNICODE.arrowLeft || value === UNICODE.arrowRight || value === "◄" || value === "►" || value === "←" || value === "→" || value === "<" || value === ">" ? "horizontal" : "vertical";
   } else return null;
 
   const dirs = axis === "horizontal" ? [Direction.LEFT, Direction.RIGHT] : [Direction.UP, Direction.DOWN];
@@ -58,6 +58,14 @@ const BENDS = new Set([
   UNICODE.cornerTopRight,
   UNICODE.cornerBottomRight,
   UNICODE.cornerBottomLeft,
+  "╭",
+  "╮",
+  "╯",
+  "╰",
+  "╔",
+  "╗",
+  "╝",
+  "╚",
 ]);
 
 const straightCharFor = (d: Direction) => (d.isHorizontal() ? H : V);
@@ -75,12 +83,12 @@ export function traceLineFromTip(
   let current = tip.add(bodyDir);
   for (let steps = 0; steps < 1000; steps++) {
     const value = layer.get(current);
-    if (value === straightCharFor(bodyDir)) {
+    if (isStraight(value, bodyDir.isHorizontal())) {
       cells.push(current);
       current = current.add(bodyDir);
       continue;
     }
-    if (value != null && BENDS.has(value) && connects(value, bodyDir.opposite())) {
+    if (value != null && isCorner(value) && BENDS.has(value) && connects(value, bodyDir.opposite())) {
       cells.push(current);
       return { cells, anchor: current };
     }

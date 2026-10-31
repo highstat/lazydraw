@@ -9,6 +9,7 @@ import {
   disconnect,
   isArrow,
   isBoxDrawing,
+  isStyled,
 } from "./glyphs";
 import { isErase, Layer, StackedLayers } from "./layer";
 import { Direction, Vector } from "./vector";
@@ -94,7 +95,7 @@ export function snap(scratch: Layer, committed: Layer, protect: ReadonlySet<stri
     for (const k of candidates) {
       const position = Vector.fromKey(k);
       const value = stateAt(position);
-      if (!isBoxDrawing(value) || isArrow(value)) continue;
+      if (!isBoxDrawing(value) || isArrow(value) || isStyled(value)) continue;
       const dirs = Direction.ALL.filter((d) => {
         const n = stateAt(position.add(d));
         return isBoxDrawing(n) && connects(n, d.opposite());

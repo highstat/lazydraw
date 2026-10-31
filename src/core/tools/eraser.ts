@@ -1,7 +1,7 @@
 // Freeform eraser: drags a path of erase markers, snapped so adjacent lines detach cleanly.
 import { Layer } from "../layer";
 import { snap } from "../snap";
-import type { Vector } from "../vector";
+import { Vector } from "../vector";
 import type { HoverHint, Tool, ToolContext } from "./tool";
 
 export class EraserTool implements Tool {
@@ -15,7 +15,14 @@ export class EraserTool implements Tool {
 
   private draw(p: Vector): void {
     if (!this.layer) return;
-    this.layer.set(p, "");
+    const s = Math.max(1, Math.min(15, this.ctx.brushSize));
+    const x0 = -Math.floor((s - 1) / 2);
+    const x1 = Math.ceil((s - 1) / 2);
+    const y0 = -Math.floor((s - 1) / 2);
+    const y1 = Math.ceil((s - 1) / 2);
+    for (let dy = y0; dy <= y1; dy++) {
+      for (let dx = x0; dx <= x1; dx++) this.layer.set(new Vector(p.x + dx, p.y + dy), "");
+    }
     const canvas = this.ctx.canvas;
     const scratch = this.layer.clone();
     scratch.setFrom(snap(scratch, canvas.committed));

@@ -13,6 +13,10 @@ const NAMED: Record<string, string> = {
   down: KEY.DOWN,
   left: KEY.LEFT,
   right: KEY.RIGHT,
+  home: KEY.HOME,
+  end: KEY.END,
+  pageup: KEY.PAGE_UP,
+  pagedown: KEY.PAGE_DOWN,
 };
 
 /** The printable character a key produces, if any. */
@@ -37,7 +41,7 @@ export function toolKey(k: KeyEvent): string | null {
 export function altDigit(k: KeyEvent): number | null {
   if (!(k.meta || k.option) || k.ctrl) return null;
   const n = Number(k.name);
-  return Number.isInteger(n) && n >= 1 && n <= 6 ? n : null;
+  return Number.isInteger(n) && n >= 1 && n <= 7 ? n : null;
 }
 
 export const isCtrl = (k: KeyEvent, name: string) => k.ctrl && !k.meta && k.name === name;

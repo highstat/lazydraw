@@ -1,21 +1,33 @@
 // Routes input to the active tool. The terminal-free counterpart of
 // ASCIIFlow's store + controller: tests drive it directly.
 import { Canvas } from "./canvas";
+import type { Box } from "./box";
+import { type Connector, reflowConnectors, routeConnector } from "./connector";
+import { DEFAULT_DRAW_STYLE, type DrawStyle, type TextMode } from "./style";
+import type { TextFontStyle } from "./text";
 import { BoxTool } from "./tools/box";
 import { EraserTool } from "./tools/eraser";
 import { LineTool } from "./tools/line";
+import { PencilTool } from "./tools/pencil";
 import { SelectTool } from "./tools/select";
 import { TextTool } from "./tools/text";
 import type { HoverHint, Mods, Tool, ToolContext } from "./tools/tool";
 import type { Vector } from "./vector";
 
-export const TOOL_IDS = ["box", "select", "arrow", "line", "text", "eraser"] as const;
+export const TOOL_IDS = ["box", "select", "arrow", "line", "text", "eraser", "pencil"] as const;
 export type ToolId = (typeof TOOL_IDS)[number];
 
 export class Editor implements ToolContext {
   canvas: Canvas;
+  brushSize = 1;
+  style: DrawStyle = { ...DEFAULT_DRAW_STYLE };
+  textMode: TextMode = "inplace";
+  insertMode = true;
+  fontStyle: TextFontStyle = "normal";
   private toolId: ToolId = "box";
   private readonly tools: Record<ToolId, Tool>;
+  /** Smart connectors created this session; reflowed when their boxes move. */
+  readonly connectors: Connector[] = [];
   /** A pointer gesture is in progress on the canvas. */
   drawing = false;
 
@@ -28,6 +40,7 @@ export class Editor implements ToolContext {
       line: new LineTool(this, false),
       text: new TextTool(this),
       eraser: new EraserTool(this),
+      pencil: new PencilTool(this),
     };
   }
 
@@ -64,6 +77,7 @@ export class Editor implements ToolContext {
     this.cancelGesture();
     this.current.cleanup();
     this.canvas = canvas;
+    this.connectors.length = 0;
   }
 
   down(p: Vector, m: Mods): void {
@@ -114,5 +128,21 @@ export class Editor implements ToolContext {
   /** Commits pending tool state (a text session) before save/switch. */
   flush(): void {
     if (this.toolId === "text") this.text.commit();
+  }
+
+  /** Routes and commits a smart connector between two boxes. */
+  connectBoxes(from: Box, to: Box): boolean {
+    const route = routeConnector(this.canvas.committed, from, to, this.style);
+    if (!route) return false;
+    if (!this.canvas.commit(route.layer)) return false;
+    this.connectors.push({ from, to, cells: route.cells, glyphs: route.glyphs });
+    return true;
+  }
+
+  /** Select-tool hook: keep attached connectors glued to their boxes. */
+  boxMoved(from: Box, to: Box): void {
+    if (this.connectors.length === 0) return;
+    const diff = reflowConnectors(this.canvas.committed, this.connectors, from, to, this.style);
+    if (diff) this.canvas.commit(diff);
   }
 }

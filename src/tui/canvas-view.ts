@@ -51,57 +51,75 @@ export function renderCanvas(p: Painter, s: CanvasViewState): void {
   const scratch = canvas.scratch.map;
   const sel = canvas.selection;
   const { x: ox, y: oy } = s.viewport.origin;
+  const maxX = p.width - 1;
+  const maxY = p.height - 1;
   const highlightHover =
     s.hoverCell != null && s.editor.tool === "select" && !s.editor.drawing && s.hoverHint !== "default";
+  const hoverX = s.hoverCell?.x ?? Number.NaN;
+  const hoverY = s.hoverCell?.y ?? Number.NaN;
 
-  for (let sy = 0; sy < p.height; sy++) {
+  /** Grid/background decoration for one screen cell. */
+  const base = (sx: number, sy: number, cx: number, cy: number): void => {
+    switch (s.grid) {
+      case "lattice":
+        // U+1FB7C: left and bottom hairlines in one glyph. Terminals draw it flush with the cell edges, unlike an underline.
+        p.buf.setCell(sx, sy, "\u{1FB7C}", pal.grid, pal.bg, 0);
+        return;
+      case "checker":
+        p.buf.setCell(sx, sy, " ", pal.fg, (cx + cy) & 1 ? pal.bgAlt : pal.bg, 0);
+        return;
+      case "dots":
+        p.buf.setCell(sx, sy, "·", pal.grid, pal.bg, 0);
+        return;
+      default:
+        p.buf.setCell(sx, sy, " ", pal.fg, pal.bg, 0);
+    }
+  };
+
+  // Pass 1: fill just the visible screen with background/grid. No map lookups.
+  for (let sy = 0; sy <= maxY; sy++) {
     const cy = sy + oy;
-    for (let sx = 0; sx < p.width; sx++) {
-      const cx = sx + ox;
-      const key = `${cx},${cy}`;
-      let bg = pal.bg;
-      let fg = pal.fg;
-      let attr = 0;
-      let ch: string | undefined;
+    for (let sx = 0; sx <= maxX; sx++) base(sx, sy, sx + ox, cy);
+  }
 
-      const sv = scratch.get(key);
-      if (sv !== undefined) {
-        bg = pal.highlight;
-        fg = pal.scratch;
-        ch = isErase(sv) ? undefined : sv;
-      } else {
-        ch = committed.get(key);
+  /** Draws one sparse layer's visible cells; `scratch` paints its highlight background. */
+  const drawLayer = (map: Map<string, string>, isScratch: boolean): void => {
+    for (const [key, value] of map) {
+      const comma = key.indexOf(",");
+      const cx = Number(key.slice(0, comma));
+      const cy = Number(key.slice(comma + 1));
+      const sx = cx - ox;
+      const sy = cy - oy;
+      if (sx < 0 || sy < 0 || sx > maxX || sy > maxY) continue;
+      const erase = isErase(value);
+      if (!isScratch && erase) continue;
+      if (isScratch && erase) {
+        // Erase marker over committed/grid: blank with the scratch highlight.
+        const inSel = sel != null && cx >= sel.left() && cx <= sel.right() && cy >= sel.top() && cy <= sel.bottom();
+        p.buf.setCell(sx, sy, " ", pal.fg, inSel ? pal.selectionBg : pal.highlight, 0);
+        continue;
       }
+      const inSel = sel != null && cx >= sel.left() && cx <= sel.right() && cy >= sel.top() && cy <= sel.bottom();
+      const bg = inSel ? pal.selectionBg : isScratch ? pal.highlight : pal.bg;
+      const fg = isScratch ? pal.scratch : pal.fg;
+      const attr = highlightHover && cx === hoverX && cy === hoverY ? ATTR.INVERSE : 0;
+      p.buf.setCell(sx, sy, value, fg, bg, attr);
+    }
+  };
 
-      if (sel && cx >= sel.left() && cx <= sel.right() && cy >= sel.top() && cy <= sel.bottom()) {
-        bg = pal.selectionBg;
-      }
-
-      if (ch === undefined) {
-        // Grid decoration, anchored to canvas coordinates so it doesn't shimmer when panning.
-        if (bg === pal.bg) {
-          switch (s.grid) {
-            case "lattice":
-              // U+1FB7C: left and bottom hairlines in one glyph. Terminals draw it flush with the cell edges, unlike an underline.
-              p.buf.setCell(sx, sy, "\u{1FB7C}", pal.grid, bg, 0);
-              continue;
-            case "checker":
-              if (((cx + cy) & 1) === 1) bg = pal.bgAlt;
-              break;
-            case "dots":
-              p.buf.setCell(sx, sy, "·", pal.grid, bg, 0);
-              continue;
-          }
-        }
-        ch = " ";
-      }
-
-      if (highlightHover && cx === s.hoverCell!.x && cy === s.hoverCell!.y && ch !== " ") {
-        attr |= ATTR.INVERSE;
-      }
-      p.buf.setCell(sx, sy, ch, fg, bg, attr);
+  // Selection background first, then the chars that sit on top of it.
+  if (sel) {
+    const left = Math.max(0, sel.left() - ox);
+    const right = Math.min(maxX, sel.right() - ox);
+    const top = Math.max(0, sel.top() - oy);
+    const bottom = Math.min(maxY, sel.bottom() - oy);
+    for (let sy = top; sy <= bottom; sy++) {
+      for (let sx = left; sx <= right; sx++) p.buf.setCell(sx, sy, " ", pal.fg, pal.selectionBg, 0);
     }
   }
+
+  drawLayer(committed, false);
+  drawLayer(scratch, true);
 
   // Dimensions label while dragging structure (ASCIIFlow shows W×H).
   const tool = s.editor.tool;
@@ -118,7 +136,7 @@ export function renderCanvas(p: Painter, s: CanvasViewState): void {
   if (cursor && s.cursorOn) {
     const sx = cursor.x - ox;
     const sy = cursor.y - oy;
-    if (sx >= 0 && sy >= 0 && sx < p.width && sy < p.height) {
+    if (sx >= 0 && sy >= 0 && sx <= maxX && sy <= maxY) {
       const v = canvas.rendered().get(cursor) ?? " ";
       p.buf.setCell(sx, sy, v, pal.fg, pal.bg, ATTR.INVERSE);
     }

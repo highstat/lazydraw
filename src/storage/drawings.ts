@@ -31,13 +31,20 @@ export interface DrawingInfo {
   updatedAt: string;
 }
 
+const RESERVED = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/i;
+
+/**
+ * File-safe name that preserves international letters (Cyrillic, CJK, accents…).
+ * Keeps the slug human-readable and stable across Linux, macOS and Windows.
+ */
 export function slugify(name: string): string {
-  const slug = name
-    .normalize("NFKD")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
+  let slug = [...name.normalize("NFC").trim().toLowerCase()]
+    .join("")
+    .replace(/[^\p{L}\p{N}]+/gu, "-")
     .replace(/^-+|-+$/g, "");
-  return slug || "untitled";
+  slug = [...slug].slice(0, 80).join("").replace(/-+$/g, "");
+  if (!slug) return "untitled";
+  return RESERVED.test(slug) ? `_${slug}` : slug;
 }
 
 export function pathForName(name: string, dir = drawingsDir()): string {
@@ -79,7 +86,7 @@ export class DrawingStore {
     mkdirSync(this.dir, { recursive: true });
   }
 
-  list(): DrawingInfo[] {
+  list(sort: "recent" | "name" = "name"): DrawingInfo[] {
     let names: string[];
     try {
       names = readdirSync(this.dir).filter((n) => n.endsWith(FILE_EXT));
@@ -96,7 +103,11 @@ export class DrawingStore {
         // Skip unreadable files rather than failing the whole list.
       }
     }
-    return out.sort((a, b) => a.name.localeCompare(b.name));
+    return out.sort((a, b) =>
+      sort === "recent"
+        ? (Date.parse(b.updatedAt) || 0) - (Date.parse(a.updatedAt) || 0) || a.name.localeCompare(b.name)
+        : a.name.localeCompare(b.name),
+    );
   }
 
   exists(name: string): boolean {

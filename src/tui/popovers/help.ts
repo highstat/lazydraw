@@ -11,7 +11,8 @@ export const TOOL_HELP: Record<ToolId, string> = {
   arrow: "drag start to end. press f to flip the elbow",
   line: "drag start to end. press f to flip the elbow",
   text: "click and type. enter: new line, esc: finish, arrows move",
-  eraser: "drag to erase",
+  eraser: "drag to erase · [ ] brush size",
+  pencil: "drag to draw freehand · [ ] brush size",
 };
 
 const SHORTCUTS: [string, string][] = [

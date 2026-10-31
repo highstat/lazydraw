@@ -3,7 +3,7 @@ import { TOOL_IDS, type ToolId } from "../core/editor";
 import type { Painter } from "./painter";
 import type { Palette } from "./theme";
 
-export type PanelId = "files" | "export" | "settings" | "help" | "menu";
+export type PanelId = "files" | "export" | "settings" | "help" | "menu" | "history" | "palette";
 
 /** `quit` has no place on the bar; it is a menu-only entry. */
 export type ItemId =
@@ -30,9 +30,9 @@ interface Form {
 
 const tools = (labels: readonly string[]): Item[] => TOOL_IDS.map((id, i) => ({ id, label: labels[i]! }));
 
-const FULL_TOOLS = ["box", "select", "arrow", "line", "text", "eraser"];
-const SHORT_TOOLS = ["box", "sel", "arrow", "line", "text", "erase"];
-const NARROW_TOOLS = ["box", "sel", "arw", "lin", "txt", "ers"];
+const FULL_TOOLS = ["box", "select", "arrow", "line", "text", "eraser", "pencil"];
+const SHORT_TOOLS = ["box", "sel", "arrow", "line", "text", "erase", "pen"];
+const NARROW_TOOLS = ["box", "sel", "arw", "lin", "txt", "ers", "pen"];
 
 const wide = (toolLabels: string[], exp: string, help: string): Item[][] => [
   [{ id: "files", label: "≡" }],
@@ -51,7 +51,7 @@ const FORMS: Form[] = [
   { name: "compact", pad: 1, groups: wide(SHORT_TOOLS, "exp", "?") },
   { name: "tight", pad: 0, groups: wide(SHORT_TOOLS, "exp", "?") },
   { name: "narrow", pad: 1, groups: [[{ id: "menu", label: "≡" }], tools(NARROW_TOOLS)] },
-  { name: "tiny", pad: 0, groups: [[{ id: "menu", label: "≡" }], tools(["b", "s", "a", "l", "t", "e"])] },
+  { name: "tiny", pad: 0, groups: [[{ id: "menu", label: "≡" }], tools(["b", "s", "a", "l", "t", "e", "p"])] },
 ];
 
 function formWidth(f: Form): number {
@@ -114,6 +114,7 @@ export function toolColor(pal: Palette, id: ToolId) {
     line: pal.accent,
     text: pal.warning,
     eraser: pal.orange,
+    pencil: pal.success,
   }[id];
 }
 

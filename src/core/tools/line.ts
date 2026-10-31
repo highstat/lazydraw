@@ -2,14 +2,22 @@
 import { Layer } from "../layer";
 import { arrowFor, connectEndpoints, inferHorizontalFirst, line } from "../route";
 import { snap } from "../snap";
+import type { DrawStyle } from "../style";
 import type { Vector } from "../vector";
 import type { HoverHint, Mods, Tool, ToolContext } from "./tool";
 
 /** Builds the scratch layer for a line/arrow drag. */
-export function drawLine(committed: Layer, start: Vector, end: Vector, isArrow: boolean, flip: boolean): Layer {
+export function drawLine(
+  committed: Layer,
+  start: Vector,
+  end: Vector,
+  isArrow: boolean,
+  flip: boolean,
+  style: DrawStyle,
+): Layer {
   const horizontalFirst = inferHorizontalFirst(start, end, committed, flip);
-  const layer = line(start, end, horizontalFirst);
-  if (isArrow) layer.set(end, arrowFor(start, end, horizontalFirst));
+  const layer = line(start, end, horizontalFirst, style.line);
+  if (isArrow) layer.set(end, arrowFor(start, end, horizontalFirst, style.arrow));
   // Endpoints join whatever structure points at them. An arrow's head stays a head.
   connectEndpoints(layer, committed, isArrow ? [start] : [start, end]);
   layer.setFrom(snap(layer, committed));
@@ -51,7 +59,7 @@ export class LineTool implements Tool {
       canvas.setScratch(new Layer());
       return;
     }
-    canvas.setScratch(drawLine(canvas.committed, s, e, this.isArrow, m.flip));
+    canvas.setScratch(drawLine(canvas.committed, s, e, this.isArrow, m.flip, this.ctx.style));
   }
 
   end(): void {

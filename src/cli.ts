@@ -5,10 +5,11 @@ import { basename, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { type CliRenderer, createCliRenderer } from "@opentui/core";
 import pkg from "../package.json";
-import { type ExportConfig, exportText, isWrapper, type Wrapper } from "./core/export";
+import { type ExportConfig, FONT_FAMILIES, isExportFormat, isFontFamily, isWrapper, renderExport, type Wrapper } from "./core/export";
 import { Layer } from "./core/layer";
+import { isMediaPath, mediaToLayer, MEDIA_EXTENSIONS } from "./core/media";
 import { textToLayer } from "./core/text";
-import { loadConfig, saveConfig } from "./storage/config";
+import { configPath, loadConfig, saveConfig } from "./storage/config";
 import { DrawingStore, FILE_EXT } from "./storage/drawings";
 import { App, type Clipboard, type OpenDrawing } from "./tui/app";
 import { detectTerminalColorsSoon, PALETTE_WAIT_MS } from "./tui/theme";
@@ -18,9 +19,16 @@ const HELP = `lazydraw ${pkg.version} — terminal ASCII diagram editor
 usage:
   lazydraw                         open the last drawing (or "untitled")
   lazydraw <name|path>             open or create a drawing
+  lazydraw view <name|path>        open read-only (presentation mode)
+  lazydraw <name> --watch          reload when the file changes
   lazydraw --import diagram.txt    new drawing from a text file
-  lazydraw export <name|path> [--basic] [--comment <style>] [--fenced] [-o out.txt]
+  lazydraw media <image|video> [name] [--width 80] [--at 1.5] [--invert]
+                               new drawing from a photo or video frame (needs ffmpeg)
+  lazydraw export <name|path> [--basic] [--comment <style>] [--fenced]
+                               [--format txt|svg|html] [--font <family>] [--font-size <n>]
+                               [-o out.txt]
   lazydraw list                    list saved drawings
+  lazydraw paths                   show where drawings and config live
   lazydraw --version | --help
 
 comment styles: none standard filled quotes hashes slashes three-slashes
@@ -78,6 +86,11 @@ function exportCommand(store: DrawingStore, args: string[]) {
       comment: { type: "string" },
       fenced: { type: "boolean" },
       output: { type: "string", short: "o" },
+      format: { type: "string" },
+      svg: { type: "boolean" },
+      html: { type: "boolean" },
+      font: { type: "string" },
+      "font-size": { type: "string" },
     },
   });
   const target = positionals[0];
@@ -87,10 +100,25 @@ function exportCommand(store: DrawingStore, args: string[]) {
   const comment = values.comment ?? "none";
   const wrapper = COMMENT_ALIASES[comment] ?? comment;
   if (!isWrapper(wrapper)) fail(`unknown comment style "${comment}"`);
-  const config: ExportConfig = { characters: values.basic ? "basic" : "extended", wrapper, fenced: !!values.fenced };
-  const text = `${exportText(store.loadSync(path).layer, config)}\n`;
-  if (values.output) writeFileSync(values.output, text);
-  else process.stdout.write(text);
+  const format = values.svg ? "svg" : values.html ? "html" : (values.format ?? "txt");
+  if (!isExportFormat(format)) fail(`unknown export format "${format}"`);
+  if (values.font && !isFontFamily(values.font)) fail(`unknown font "${values.font}" (try: ${FONT_FAMILIES.join(", ")})`);
+  const fontSize = values["font-size"] ? Number(values["font-size"]) : undefined;
+  if (fontSize !== undefined && (!Number.isFinite(fontSize) || fontSize < 8 || fontSize > 48)) fail("font size must be 8..48");
+  const base = loadConfig().export;
+  const config: ExportConfig = {
+    ...base,
+    characters: values.basic ? "basic" : "extended",
+    wrapper,
+    fenced: !!values.fenced,
+    format,
+    fontFamily: values.font && isFontFamily(values.font) ? values.font : base.fontFamily,
+    fontSize: fontSize ?? base.fontSize,
+  };
+  const text = renderExport(store.loadSync(path).layer, config).text;
+  const output = text.endsWith("\n") ? text : `${text}\n`;
+  if (values.output) writeFileSync(values.output, output);
+  else process.stdout.write(output);
 }
 
 function systemClipboard(renderer: CliRenderer): Clipboard {
@@ -105,23 +133,79 @@ function systemClipboard(renderer: CliRenderer): Clipboard {
       return null;
     }
   };
+  const copyCommands = (): string[][] => {
+    if (process.platform === "darwin") return [["pbcopy"]];
+    if (process.platform === "win32") return [["clip.exe"], ["clip"]];
+    return [
+      ["wl-copy"],
+      ["xclip", "-selection", "clipboard"],
+      ["xsel", "--clipboard", "--input"],
+    ];
+  };
+  const pasteCommands = (): string[][] => {
+    if (process.platform === "darwin") return [["pbpaste"]];
+    if (process.platform === "win32") {
+      return [
+        ["powershell", "-NoProfile", "-Command", "Get-Clipboard"],
+        ["pwsh", "-NoProfile", "-Command", "Get-Clipboard"],
+      ];
+    }
+    return [
+      ["wl-paste", "--no-newline"],
+      ["xclip", "-selection", "clipboard", "-o"],
+      ["xsel", "--clipboard", "--output"],
+    ];
+  };
   return {
     copy(text) {
       internal = text;
       renderer.copyToClipboardOSC52(text);
-      if (local && process.platform === "darwin") tryRun(["pbcopy"], text);
+      if (local) {
+        for (const cmd of copyCommands()) if (tryRun(cmd, text) !== null) return;
+      }
     },
     paste() {
       if (local) {
-        const text =
-          process.platform === "darwin"
-            ? tryRun(["pbpaste"])
-            : (tryRun(["wl-paste", "--no-newline"]) ?? tryRun(["xclip", "-selection", "clipboard", "-o"]));
-        if (text) return text;
+        for (const cmd of pasteCommands()) {
+          const text = tryRun(cmd);
+          if (text !== null) return text;
+        }
       }
       return internal;
     },
   };
+}
+
+function mediaCommand(store: DrawingStore, args: string[]) {
+  const { values, positionals } = parseArgs({
+    args,
+    allowPositionals: true,
+    options: {
+      width: { type: "string" },
+      at: { type: "string" },
+      invert: { type: "boolean" },
+    },
+  });
+  const source = positionals[0];
+  if (!source) fail(`media needs an image or video path (${MEDIA_EXTENSIONS.slice(0, 6).join(", ")}, …)`);
+  if (!existsSync(source)) fail(`can't find ${source}`);
+  if (!isMediaPath(source)) fail(`not an image or video: ${source}`);
+  const width = values.width ? Number(values.width) : 80;
+  if (!Number.isFinite(width) || width < 8 || width > 240) fail("width must be 8..240");
+  const at = values.at ? Number(values.at) : undefined;
+  if (at !== undefined && (!Number.isFinite(at) || at < 0)) fail("at must be a positive number of seconds");
+  let layer: Layer;
+  try {
+    layer = mediaToLayer(source, { width, at, invert: !!values.invert });
+  } catch (e) {
+    fail((e as Error).message);
+  }
+  const fallback = basename(source).replace(/\.[^.]+$/, "");
+  const name = store.uniqueName(positionals[1] ?? fallback);
+  const path = store.pathFor(name);
+  const createdAt = new Date().toISOString();
+  store.save(path, name, layer, createdAt);
+  console.log(`${name}\t${layer.size()} cells\t${path}`);
 }
 
 async function main() {
@@ -129,18 +213,30 @@ async function main() {
   const store = new DrawingStore();
 
   if (argv[0] === "export") return exportCommand(store, argv.slice(1));
+  if (argv[0] === "media") return mediaCommand(store, argv.slice(1));
   if (argv[0] === "list") {
     for (const d of store.list()) console.log(`${d.name}\t${d.size} cells\t${d.path}`);
     return;
   }
+  if (argv[0] === "paths") {
+    console.log(`drawings\t${store.dir}`);
+    console.log(`config\t${configPath()}`);
+    return;
+  }
 
+  // `view` is a subcommand alias for --view/--read-only.
+  const viewMode = argv[0] === "view";
+  const args = viewMode ? argv.slice(1) : argv;
   const { values, positionals } = parseArgs({
-    args: argv,
+    args,
     allowPositionals: true,
     options: {
       import: { type: "string" },
       version: { type: "boolean", short: "v" },
       help: { type: "boolean", short: "h" },
+      view: { type: "boolean" },
+      "read-only": { type: "boolean" },
+      watch: { type: "boolean" },
     },
   });
   if (values.help) return console.log(HELP);
@@ -148,8 +244,10 @@ async function main() {
   if (!process.stdin.isTTY || !process.stdout.isTTY) fail("needs an interactive terminal (try `lazydraw export`)");
 
   const config = loadConfig();
+  const readOnly = viewMode || !!values.view || !!values["read-only"];
   let drawing: OpenDrawing;
   if (values.import) {
+    if (readOnly) fail("can't import into a read-only view");
     let text: string;
     try {
       text = readFileSync(values.import, "utf8");
@@ -163,6 +261,7 @@ async function main() {
     store.save(path, name, layer, createdAt);
     drawing = { path, name, layer, createdAt };
   } else if (positionals[0]) {
+    if (readOnly && !findDrawing(store, positionals[0])) fail(`no drawing named "${positionals[0]}"`);
     drawing = openOrCreate(store, positionals[0]);
   } else if (config.lastDrawing && existsSync(config.lastDrawing)) {
     drawing = openOrCreate(store, config.lastDrawing);
@@ -212,6 +311,8 @@ async function main() {
     drawing,
     clipboard: systemClipboard(renderer),
     term,
+    readOnly,
+    watch: !!values.watch,
     onQuit: () => exit(0),
   });
   app.requestRender();

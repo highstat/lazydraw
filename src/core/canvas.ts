@@ -103,6 +103,21 @@ export class Canvas {
     this.commit(diff);
   }
 
+  /** Replaces the whole drawing as one undo step (used by snapshot restore). */
+  replace(layer: Layer): boolean {
+    const diff = new Layer();
+    for (const [k, v] of this.committed.map) {
+      if (!layer.map.has(k) || layer.map.get(k) === "" || layer.map.get(k) === " ") diff.map.set(k, "");
+      void v;
+    }
+    for (const [k, v] of layer.map) {
+      if (v !== "" && v !== " " && this.committed.map.get(k) !== v) diff.map.set(k, v);
+    }
+    if (diff.size() === 0) return false;
+    this.selection = null;
+    return this.commit(diff);
+  }
+
   undo(): boolean {
     const diff = this.undoLayers.pop();
     if (!diff) return false;

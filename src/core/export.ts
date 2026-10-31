@@ -20,18 +20,54 @@ export const WRAPPERS = [
 
 export type Wrapper = (typeof WRAPPERS)[number]["id"];
 export type Charset = "extended" | "basic";
+export type ExportFormat = "txt" | "svg" | "html";
+
+/** Monospace families offered for SVG/HTML exports. The TUI itself uses the terminal font. */
+export const FONT_FAMILIES = [
+  "JetBrains Mono",
+  "Fira Code",
+  "IBM Plex Mono",
+  "Iosevka",
+  "Cascadia Code",
+  "SF Mono",
+  "Menlo",
+  "Consolas",
+  "monospace",
+] as const;
+export type FontFamily = (typeof FONT_FAMILIES)[number];
 
 export interface ExportConfig {
   characters: Charset;
   wrapper: Wrapper;
   /** Wrap the result in a Markdown code fence. */
   fenced: boolean;
+  format: ExportFormat;
+  fontFamily: FontFamily;
+  fontSize: number;
+  /** Export only the current selection when there is one. */
+  selectionOnly: boolean;
 }
 
-export const DEFAULT_EXPORT: ExportConfig = { characters: "extended", wrapper: "none", fenced: false };
+export const DEFAULT_EXPORT: ExportConfig = {
+  characters: "extended",
+  wrapper: "none",
+  fenced: false,
+  format: "txt",
+  fontFamily: "JetBrains Mono",
+  fontSize: 14,
+  selectionOnly: false,
+};
 
 export function isWrapper(value: string): value is Wrapper {
   return WRAPPERS.some((w) => w.id === value);
+}
+
+export function isExportFormat(value: string): value is ExportFormat {
+  return value === "txt" || value === "svg" || value === "html";
+}
+
+export function isFontFamily(value: string): value is FontFamily {
+  return (FONT_FAMILIES as readonly string[]).includes(value);
 }
 
 export function toBasic(text: string): string {
@@ -84,4 +120,69 @@ export function applyExportConfig(text: string, config: ExportConfig): string {
 /** Drawing text: bounding box of all non-empty cells, trailing spaces trimmed per row. */
 export function exportText(layer: LayerView, config: ExportConfig): string {
   return applyExportConfig(layerToText(layer, null, true), config);
+}
+
+const escapeXml = (value: string) =>
+  value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+
+/**
+ * Standalone SVG. Cells are laid out on a monospace grid, so diagrams stay crisp at
+ * any zoom and can be dropped straight into a README or a slide.
+ */
+export function exportSvg(text: string, config: ExportConfig): string {
+  const lines = text.split("\n");
+  const columns = Math.max(1, ...lines.map((line) => [...line].length));
+  const pad = 2;
+  const cellW = Math.max(6, Math.round(config.fontSize * 0.6));
+  const cellH = Math.max(12, Math.round(config.fontSize * 1.25));
+  const width = (columns + pad * 2) * cellW;
+  const height = (Math.max(1, lines.length) + pad * 2 - 1) * cellH;
+  const body = lines
+    .map(
+      (line, i) =>
+        `<text x="${pad * cellW}" y="${(pad + i) * cellH}" xml:space="preserve">${escapeXml(line)}</text>`,
+    )
+    .join("\n    ");
+  return [
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">`,
+    `  <rect width="100%" height="100%" fill="#ffffff"/>`,
+    `  <g font-family="${escapeXml(config.fontFamily)}, monospace" font-size="${config.fontSize}" fill="#24292f">`,
+    `    ${body}`,
+    "  </g>",
+    "</svg>",
+    "",
+  ].join("\n");
+}
+
+/** A self-contained HTML page with the drawing in a <pre> block. */
+export function exportHtml(text: string, config: ExportConfig): string {
+  return [
+    "<!doctype html>",
+    '<html lang="en">',
+    "<head>",
+    '  <meta charset="utf-8">',
+    "  <title>lazydraw diagram</title>",
+    "  <style>",
+    "    body { margin: 0; padding: 24px; background: #fff; }",
+    `    pre { margin: 0; color: #24292f; font-family: "${config.fontFamily}", ui-monospace, monospace; font-size: ${config.fontSize}px; line-height: 1.25; }`,
+    "  </style>",
+    "</head>",
+    "<body>",
+    `<pre>${escapeXml(text)}</pre>`,
+    "</body>",
+    "</html>",
+    "",
+  ].join("\n");
+}
+
+export interface RenderedExport {
+  text: string;
+  extension: string;
+}
+
+/** Renders the drawing in the configured format. Wrappers only apply to plain text. */
+export function renderExport(layer: LayerView, config: ExportConfig): RenderedExport {
+  if (config.format === "svg") return { text: exportSvg(layerToText(layer, null, true), config), extension: "svg" };
+  if (config.format === "html") return { text: exportHtml(layerToText(layer, null, true), config), extension: "html" };
+  return { text: exportText(layer, config), extension: "txt" };
 }

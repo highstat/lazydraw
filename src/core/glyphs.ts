@@ -57,9 +57,33 @@ export const ASCII: CharacterSet = {
 };
 
 /** Unicode glyph -> "ASCII Basic" glyph, used by export. */
-export const BASIC: ReadonlyMap<string, string> = new Map(
-  (Object.keys(UNICODE) as (keyof CharacterSet)[]).map((k) => [UNICODE[k], ASCII[k]]),
-);
+export const BASIC: ReadonlyMap<string, string> = new Map([
+  ...(Object.keys(UNICODE) as (keyof CharacterSet)[]).map((k) => [UNICODE[k], ASCII[k]] as [string, string]),
+  ["╭", "+"],
+  ["╮", "+"],
+  ["╯", "+"],
+  ["╰", "+"],
+  ["╔", "+"],
+  ["╗", "+"],
+  ["╚", "+"],
+  ["╝", "+"],
+  ["═", "-"],
+  ["║", "|"],
+  ["╌", "-"],
+  ["╎", "|"],
+  ["╥", "+"],
+  ["╨", "+"],
+  ["◇", "+"],
+  ["◜", "+"],
+  ["◝", "+"],
+  ["◟", "+"],
+  ["◞", "+"],
+  ["→", ">"],
+  ["←", "<"],
+  ["↑", "^"],
+  ["↓", "v"],
+  ["V", "v"],
+]);
 
 const U = 1;
 const R = 2;
@@ -94,7 +118,54 @@ const ARROW_MASK = new Map<string, number>([
   ["►", L],
   ["▲", D],
   ["▼", U],
+  ["→", L],
+  ["←", R],
+  ["↑", D],
+  ["↓", U],
+  [">", L],
+  ["<", R],
+  ["^", D],
+  ["V", U],
 ]);
+
+/**
+ * Styled glyphs (rounded/double/dashed boxes, decorative corners) keep the same
+ * connection semantics as their square single-line counterparts. They live in a
+ * separate table so `connectionGlyph` does not erase a chosen style.
+ */
+const EXTRA_MASK = new Map<string, number>([
+  ["╭", D | R],
+  ["╮", D | L],
+  ["╯", U | L],
+  ["╰", U | R],
+  ["╔", D | R],
+  ["╗", D | L],
+  ["╚", U | R],
+  ["╝", U | L],
+  ["═", L | R],
+  ["║", U | D],
+  ["╦", D | L | R],
+  ["╩", U | L | R],
+  ["╠", U | D | R],
+  ["╣", U | D | L],
+  ["╬", U | D | L | R],
+  ["╌", L | R],
+  ["╎", U | D],
+  ["╥", L | R | D],
+  ["╨", L | R | U],
+  ["◇", U | D | L | R],
+  ["◜", R | D],
+  ["◝", L | D],
+  ["◟", U | R],
+  ["◞", U | L],
+]);
+
+const STYLED = new Set(EXTRA_MASK.keys());
+
+/** True for glyphs that must keep their exact form through snapping. */
+export function isStyled(value: string | null | undefined): boolean {
+  return value != null && STYLED.has(value);
+}
 
 const MASK_TO_LINE = new Map<number, string>([...LINE_MASK].map(([g, m]) => [m, g]));
 
@@ -102,16 +173,28 @@ const popcount = (m: number) => ((m & U) && 1) + ((m & R) && 1) + ((m & D) && 1)
 
 /** Lines, junctions and arrow heads — ASCIIFlow's BOX_DRAWING_VALUES. */
 export function isBoxDrawing(value: string | null | undefined): value is string {
-  return value != null && (LINE_MASK.has(value) || ARROW_MASK.has(value));
+  return value != null && (LINE_MASK.has(value) || EXTRA_MASK.has(value) || ARROW_MASK.has(value));
 }
 
 /** Lines and junctions, without arrows. */
 export function isLine(value: string | null | undefined): value is string {
-  return value != null && LINE_MASK.has(value);
+  return value != null && (LINE_MASK.has(value) || EXTRA_MASK.has(value));
 }
 
 export function isArrow(value: string | null | undefined): value is string {
   return value != null && ARROW_MASK.has(value);
+}
+
+/** A straight horizontal or vertical line glyph, in any style. */
+export function isStraight(value: string | null | undefined, horizontal: boolean): boolean {
+  return isLine(value) && maskOf(value) === (horizontal ? L | R : U | D);
+}
+
+/** A corner glyph connecting one horizontal and one vertical neighbour. */
+export function isCorner(value: string | null | undefined): boolean {
+  if (!isLine(value)) return false;
+  const m = maskOf(value);
+  return (m & (U | D)) !== 0 && (m & (L | R)) !== 0;
 }
 
 /** ASCIIFlow's `isSpecial`: any glyph the select tool treats as structure. */
@@ -119,7 +202,7 @@ export const isSpecial = isBoxDrawing;
 
 function maskOf(value: string | null | undefined): number {
   if (value == null) return 0;
-  return LINE_MASK.get(value) ?? ARROW_MASK.get(value) ?? 0;
+  return LINE_MASK.get(value) ?? EXTRA_MASK.get(value) ?? ARROW_MASK.get(value) ?? 0;
 }
 
 export function connects(value: string | null | undefined, dir: Direction): boolean {
@@ -128,7 +211,7 @@ export function connects(value: string | null | undefined, dir: Direction): bool
 
 export function connectable(value: string | null | undefined, dir: Direction): boolean {
   if (value == null) return false;
-  if (LINE_MASK.has(value)) return true;
+  if (isLine(value)) return true;
   return connects(value, dir);
 }
 
@@ -150,9 +233,11 @@ export function connect<T extends string | null>(value: T, dir: Direction | read
   }
   const d = dir as Direction;
   if (connects(value, d)) return value;
-  const m = value == null ? undefined : LINE_MASK.get(value);
+  const m = value == null ? undefined : maskOf(value);
   if (m === undefined) throw new Error(`Can't connect ${value} in direction ${d.name}`);
-  return MASK_TO_LINE.get(m | BIT.get(d)!)!;
+  const next = m | BIT.get(d)!;
+  // Styled glyphs keep their look unless the new connection cannot be expressed by them.
+  return MASK_TO_LINE.get(next) ?? value;
 }
 
 /** Removes connection(s) from a glyph when a clean glyph remains; otherwise keeps it. */
@@ -162,6 +247,8 @@ export function disconnect<T extends string | null>(value: T, dir: Direction | r
   }
   const d = dir as Direction;
   if (!connects(value, d)) return value;
+  // Styled glyphs are not normalised away.
+  if (isStyled(value)) return value;
   const m = value == null ? undefined : LINE_MASK.get(value);
   if (m === undefined) return value;
   const next = m & ~BIT.get(d)!;
@@ -174,3 +261,15 @@ export const ARROW_FOR = new Map<Direction, string>([
   [Direction.UP, UNICODE.arrowUp],
   [Direction.DOWN, UNICODE.arrowDown],
 ]);
+
+/** Arrow head glyphs for the three head styles. */
+export const ARROW_HEADS = {
+  solid: {
+    left: UNICODE.arrowLeft,
+    right: UNICODE.arrowRight,
+    up: UNICODE.arrowUp,
+    down: UNICODE.arrowDown,
+  },
+  open: { left: "←", right: "→", up: "↑", down: "↓" },
+  ascii: { left: "<", right: ">", up: "^", down: "V" },
+} as const;
