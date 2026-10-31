@@ -172,3 +172,14 @@ describe("Theme collapsing list", () => {
     }
   });
 });
+
+describe("Floating Mini-bar config and commands", () => {
+  test("DEFAULT_CONFIG has showMiniBar enabled and command exists", () => {
+    const { DEFAULT_CONFIG } = require("../src/storage/config");
+    const { COMMAND_BY_ID } = require("../src/tui/commands");
+    expect(DEFAULT_CONFIG.showMiniBar).toBe(true);
+    expect(COMMAND_BY_ID.has("view:toggleMiniBar")).toBe(true);
+    expect(COMMAND_BY_ID.get("view:toggleMiniBar")?.label).toBe("Toggle floating mini-bar");
+  });
+});
+

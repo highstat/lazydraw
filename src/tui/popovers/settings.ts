@@ -21,7 +21,7 @@ export const SETTINGS_PAGES = 3;
 
 export function settingsHeight(showAll = false): number {
   const choices = showAll ? [...THEME_CHOICES, "collapse"] : [...PRIMARY_THEMES, "more"];
-  return 2 + 1 + flowHeight(WIDTH, choices, "theme: ") + 7;
+  return 2 + 1 + flowHeight(WIDTH, choices, "theme: ") + 8;
 }
 
 const onOff = (value: boolean) => (value ? "on" : "off");
@@ -87,6 +87,20 @@ export function renderSettings(p: Painter, host: Host, anchorX: number, top: num
     }
 
     y = flow(p, r, y, themeButtons, "theme: ");
+    y = flow(
+      p,
+      r,
+      y,
+      [
+        {
+          id: "settings:minibar",
+          label: onOff(config.showMiniBar),
+          active: config.showMiniBar,
+          action: () => host.updateConfig({ showMiniBar: !config.showMiniBar }),
+        },
+      ],
+      "mini-bar:       ",
+    );
     y = flow(
       p,
       r,

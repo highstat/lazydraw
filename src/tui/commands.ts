@@ -38,6 +38,7 @@ export const COMMANDS: readonly CommandDef[] = [
   { id: "app:deleteSelection", label: "Delete selection", group: "Edit", binding: "delete,backspace" },
   { id: "app:duplicate", label: "Duplicate selection", group: "Edit", binding: "primary+d" },
   { id: "app:settings", label: "Settings", group: "View", binding: "primary+," },
+  { id: "view:toggleMiniBar", label: "Toggle floating mini-bar", group: "View" },
   { id: "app:help", label: "Keyboard help", group: "View", binding: "?" },
   { id: "app:palette", label: "Command palette", group: "View", binding: "primary+k" },
   { id: "app:recenter", label: "Recenter drawing", group: "View", binding: "home" },

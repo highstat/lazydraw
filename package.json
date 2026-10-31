@@ -4,14 +4,14 @@
   "description": "lazydraw is a terminal ASCII editor for drawing quick diagrams and sketches",
   "type": "module",
   "license": "MIT",
-  "author": "Çağrı Gökpunar",
-  "homepage": "https://github.com/mpospirit/lazydraw#readme",
+  "author": "highstat (https://github.com/highstat)",
+  "homepage": "https://github.com/highstat/lazydraw#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/mpospirit/lazydraw.git"
+    "url": "git+https://github.com/highstat/lazydraw.git"
   },
   "bugs": {
-    "url": "https://github.com/mpospirit/lazydraw/issues"
+    "url": "https://github.com/highstat/lazydraw/issues"
   },
   "keywords": [
     "ascii",

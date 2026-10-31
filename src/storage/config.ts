@@ -77,6 +77,8 @@ export interface Config {
   fileSort: FileSort;
   /** Show the current drawing path in the status bar. */
   showPath: boolean;
+  /** Show the floating context mini-bar over selections. */
+  showMiniBar: boolean;
   /** Command-id -> key binding overrides, e.g. {"app:undo": "primary+z"}. */
   keymap: Record<string, string>;
   /** Autosnapshot interval in ms. 0 disables automatic snapshots. */
@@ -107,6 +109,7 @@ export const DEFAULT_CONFIG: Config = {
   mediaWidth: 80,
   fileSort: "recent",
   showPath: true,
+  showMiniBar: true,
   keymap: {},
   snapshotMs: 120_000,
   historyLimit: 50,
@@ -160,6 +163,7 @@ export function loadConfig(path = configPath()): Config {
     mediaWidth: intIn(raw.mediaWidth, 20, 200, DEFAULT_CONFIG.mediaWidth),
     fileSort: oneOf(raw.fileSort, FILE_SORTS, DEFAULT_CONFIG.fileSort),
     showPath: raw.showPath !== false,
+    showMiniBar: raw.showMiniBar !== false,
     keymap:
       raw.keymap && typeof raw.keymap === "object" && !Array.isArray(raw.keymap)
         ? Object.fromEntries(

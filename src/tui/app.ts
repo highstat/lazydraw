@@ -500,6 +500,7 @@ export class App implements Host, ToolbarHost {
   }
 
   private paintFloatingContextBar(p: Painter, layout: ToolbarLayout) {
+    if (!this.config.showMiniBar) return;
     const sel = this.editor.canvas.selection;
     if (!sel || this.editor.drawing || this.dialog || this.panel) return;
 
@@ -518,9 +519,10 @@ export class App implements Host, ToolbarHost {
     const dupBtn = "[Dup]";
     const alignBtn = "[Align]";
     const delBtn = "[Del]";
+    const closeBtn = "[✕]";
 
     const contentWidth =
-      shapeBtn.length + 1 + styleBtn.length + 1 + dupBtn.length + 1 + alignBtn.length + 1 + delBtn.length + 2;
+      shapeBtn.length + 1 + styleBtn.length + 1 + dupBtn.length + 1 + alignBtn.length + 1 + delBtn.length + 1 + closeBtn.length + 2;
     const barW = Math.min(this.width - 2, contentWidth);
     const barH = 1;
 
@@ -583,6 +585,21 @@ export class App implements Host, ToolbarHost {
       },
       {
         fg: pal.warning,
+        bg: pal.tbBg,
+      },
+    );
+    curX += 1;
+    curX = p.button(
+      "minibar:close",
+      curX,
+      barY,
+      closeBtn,
+      () => {
+        this.updateConfig({ showMiniBar: false });
+        this.toast("mini-bar hidden · re-enable in settings (Ctrl+,)");
+      },
+      {
+        fg: pal.muted,
         bg: pal.tbBg,
       },
     );
@@ -1226,16 +1243,18 @@ export class App implements Host, ToolbarHost {
     this.toast(cut ? "cut to clipboard" : "copied to clipboard");
   }
 
-  private pasteText(text: string) {
+  private pasteText(text: string, targetAt?: Vector | null) {
     const size = textSize(text);
     const select = this.editor.select;
+    const activeSel = this.editor.canvas.selection ?? (select.hasSelection ? select.selectBox : null);
     const at =
-      this.tool === "select" && select.hasSelection && select.selectBox
-        ? select.selectBox.topLeft()
+      targetAt ??
+      (activeSel
+        ? activeSel.topLeft()
         : this.viewport.toCanvas(
             Math.floor((this.width - size.x) / 2),
             Math.floor((this.height - size.y) / 2),
-          );
+          ));
     this.editor.cancelGesture();
     this.setTool("select");
     this.editor.select.paste(text, at);
@@ -1478,6 +1497,11 @@ export class App implements Host, ToolbarHost {
 
   insertTablePrompt(): void {
     if (this.readOnly) return this.toast("read-only");
+    const activeSel = this.editor.canvas.selection ?? (this.editor.select.hasSelection ? this.editor.select.selectBox : null);
+    const targetAt = activeSel
+      ? activeSel.topLeft()
+      : (this.hover ? this.viewport.toCanvas(this.hover.x, this.hover.y) : null);
+
     this.prompt("insert table", "size (cols x rows)", "3x3", (value) => {
       const match = value.trim().match(/^(\d+)\s*[xX, ]\s*(\d+)$/);
       if (!match) return "expected format: <cols>x<rows> (e.g. 3x3)";
@@ -1492,7 +1516,7 @@ export class App implements Host, ToolbarHost {
         colWidth: 10,
         lineStyle: this.config.lineStyle,
       });
-      this.pasteText(tableText);
+      this.pasteText(tableText, targetAt);
       this.toast(`table ${cols}x${rows} inserted`);
       return null;
     });
@@ -1830,6 +1854,11 @@ export class App implements Host, ToolbarHost {
         return this.duplicateSelection();
       case "app:settings":
         return this.togglePanel("settings", this.anchorOf("settings"));
+      case "view:toggleMiniBar": {
+        const next = !this.config.showMiniBar;
+        this.updateConfig({ showMiniBar: next });
+        return this.toast(next ? "mini-bar enabled" : "mini-bar hidden");
+      }
       case "app:help":
         return this.togglePanel("help", this.anchorOf("help"));
       case "app:palette":
