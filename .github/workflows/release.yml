@@ -11,26 +11,17 @@ permissions:
 
 jobs:
   build:
-    name: Build (${{ matrix.target }})
+    name: Build (${{ matrix.bin_name }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         include:
           - os: macos-latest
-            target: darwin-arm64
             bin_name: lazydraw-darwin-arm64
-          - os: macos-13
-            target: darwin-x64
-            bin_name: lazydraw-darwin-x64
           - os: ubuntu-latest
-            target: linux-x64
             bin_name: lazydraw-linux-x64
-          - os: ubuntu-24.04-arm
-            target: linux-arm64
-            bin_name: lazydraw-linux-arm64
           - os: windows-latest
-            target: windows-x64
             bin_name: lazydraw-windows-x64.exe
 
     steps:
@@ -47,7 +38,12 @@ jobs:
         shell: bash
         run: |
           mkdir -p dist
-          bun build src/cli.ts --compile --outfile dist/${{ matrix.bin_name }}
+          bun build src/cli.ts --compile \
+            --external '@opentui/core-*-musl' \
+            --external '@opentui/core-darwin-x64' \
+            --external '@opentui/core-win32-arm64' \
+            --external '@opentui/core-linux-arm64' \
+            --outfile dist/${{ matrix.bin_name }}
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -56,7 +52,7 @@ jobs:
           path: dist/${{ matrix.bin_name }}
 
   release:
-    name: Create GitHub Release & Publish
+    name: Create GitHub Release
     needs: build
     runs-on: ubuntu-latest
     steps:
@@ -80,21 +76,3 @@ jobs:
         with:
           files: release-dist/*
           generate_release_notes: true
-
-      - name: Setup Node for npm publish
-        if: startsWith(github.ref, 'refs/tags/')
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          registry-url: 'https://registry.npmjs.org'
-
-      - name: Publish to npm (if NPM_TOKEN is configured)
-        if: startsWith(github.ref, 'refs/tags/')
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: |
-          if [ -n "$NODE_AUTH_TOKEN" ]; then
-            npm publish --access public
-          else
-            echo "NPM_TOKEN secret is not set, skipping automatic npm publish."
-          fi

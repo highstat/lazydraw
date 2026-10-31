@@ -83,16 +83,6 @@ irm https://raw.githubusercontent.com/highstat/lazydraw/main/install.ps1 | iex
 
 ---
 
-### Via npm / npx
-
-```sh
-npm install -g @highstat/lazydraw
-# or run directly without installing:
-npx @highstat/lazydraw
-```
-
----
-
 ### Via Bun
 
 ```sh
